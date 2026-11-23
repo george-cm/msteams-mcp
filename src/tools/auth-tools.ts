@@ -40,6 +40,7 @@ export const LoginInputSchema = z.object({
 
 const loginToolDefinition: Tool = {
   name: 'teams_login',
+  annotations: { readOnlyHint: false, destructiveHint: true },
   description: 'Trigger manual login flow for Microsoft Teams. Use this if the session has expired or you need to switch accounts.',
   inputSchema: {
     type: 'object',
@@ -54,6 +55,7 @@ const loginToolDefinition: Tool = {
 
 const statusToolDefinition: Tool = {
   name: 'teams_status',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Check the current authentication status and session state.',
   inputSchema: {
     type: 'object',

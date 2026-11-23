@@ -23,6 +23,7 @@ export const GetTagsInputSchema = z.object({
 
 const getTagsDefinition: Tool = {
   name: 'teams_get_tags',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: `Get tags for a Teams team. Returns tag IDs, display names, and member counts. Use the teamId from teams_find_channel results. Optionally filter by name with the query parameter.
 
 To @mention a tag in a message, use the tag MRI format: @[TagName](tag:{tagId}). Example: after finding tag "engineering" with id "abc123", use @[engineering](tag:abc123) in teams_send_message content.`,

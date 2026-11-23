@@ -138,6 +138,7 @@ export const WaitForReplyInputSchema = z.object({
 
 const sendMessageToolDefinition: Tool = {
   name: 'teams_send_message',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Send a message to a Teams conversation. Use markdown for formatting (not HTML): **bold**, *italic*, ~~strikethrough~~, `code`, ```code blocks```, lists, newlines, and tables. Tables use standard markdown table syntax:\n| Item | Price |\n|------|-------|\n| Apple | $1.00 |\n(with a header row, a |---|---| separator row, then data rows — they render as a real table in Teams). Supports @mentions: people with @[Name](mri) (MRI from teams_search_people) and channel tags with @[TagName](tag:tagId) (IDs from teams_get_tags). Markdown links [text](url) support http(s) and mailto. Defaults to self-notes (48:notes). For channel thread replies, provide replyToMessageId. For a new channel thread with a title, provide subject. To schedule for later, provide scheduleAt (ISO 8601). Set contentType to "text" to send content verbatim without markdown interpretation.',
   inputSchema: {
     type: 'object',
@@ -174,6 +175,7 @@ const sendMessageToolDefinition: Tool = {
 
 const getFavoritesToolDefinition: Tool = {
   name: 'teams_get_favorites',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the user\'s favourite/pinned conversations in Teams. Returns conversation IDs with display names (channel name, chat topic, or participant names) and type (Channel, Chat, Meeting).',
   inputSchema: {
     type: 'object',
@@ -183,6 +185,7 @@ const getFavoritesToolDefinition: Tool = {
 
 const addFavoriteToolDefinition: Tool = {
   name: 'teams_add_favorite',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Add a conversation to the user\'s favourites/pinned list.',
   inputSchema: {
     type: 'object',
@@ -198,6 +201,7 @@ const addFavoriteToolDefinition: Tool = {
 
 const removeFavoriteToolDefinition: Tool = {
   name: 'teams_remove_favorite',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Remove a conversation from the user\'s favourites/pinned list.',
   inputSchema: {
     type: 'object',
@@ -213,6 +217,7 @@ const removeFavoriteToolDefinition: Tool = {
 
 const saveMessageToolDefinition: Tool = {
   name: 'teams_save_message',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Save (bookmark) a message in Teams. Saved messages can be accessed later from the Saved view in Teams.',
   inputSchema: {
     type: 'object',
@@ -236,6 +241,7 @@ const saveMessageToolDefinition: Tool = {
 
 const unsaveMessageToolDefinition: Tool = {
   name: 'teams_unsave_message',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Remove a saved (bookmarked) message in Teams.',
   inputSchema: {
     type: 'object',
@@ -259,6 +265,7 @@ const unsaveMessageToolDefinition: Tool = {
 
 const getChatToolDefinition: Tool = {
   name: 'teams_get_chat',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the conversation ID for a 1:1 chat with a person. Use this to start a new chat or find an existing one. The conversation ID can then be used with teams_send_message to send messages.',
   inputSchema: {
     type: 'object',
@@ -274,6 +281,7 @@ const getChatToolDefinition: Tool = {
 
 const createGroupChatToolDefinition: Tool = {
   name: 'teams_create_group_chat',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Create a new group chat with multiple people. Returns a conversation ID for use with teams_send_message. You are automatically included as a member. For 1:1 chats, use teams_get_chat instead.',
   inputSchema: {
     type: 'object',
@@ -295,6 +303,7 @@ const createGroupChatToolDefinition: Tool = {
 
 const editMessageToolDefinition: Tool = {
   name: 'teams_edit_message',
+  annotations: { readOnlyHint: false, destructiveHint: true },
   description: 'Edit one of your own messages (same markdown and @mention rules as teams_send_message: people @[Name](mri), channel tags @[TagName](tag:tagId) from teams_get_tags). You can only edit messages you sent.',
   inputSchema: {
     type: 'object',
@@ -323,6 +332,7 @@ const editMessageToolDefinition: Tool = {
 
 const deleteMessageToolDefinition: Tool = {
   name: 'teams_delete_message',
+  annotations: { readOnlyHint: false, destructiveHint: true },
   description: 'Delete one of your own messages (soft delete - the message remains but content becomes empty). You can only delete messages you sent, unless you are a channel owner/moderator.',
   inputSchema: {
     type: 'object',
@@ -342,6 +352,7 @@ const deleteMessageToolDefinition: Tool = {
 
 const getUnreadToolDefinition: Tool = {
   name: 'teams_get_unread',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get unread status. Without conversationId: one bulk API call over your recent conversations (up to 200), returns separate lists of unread chats and channels (conversationId, displayName, lastMessageFrom) plus counts. With conversationId: unread count for that chat/channel using read horizon vs recent messages.',
   inputSchema: {
     type: 'object',
@@ -356,6 +367,7 @@ const getUnreadToolDefinition: Tool = {
 
 const markAsReadToolDefinition: Tool = {
   name: 'teams_mark_read',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Mark a conversation as read up to a specific message. This updates your read position so messages up to (and including) the specified message are marked as read.',
   inputSchema: {
     type: 'object',
@@ -375,6 +387,7 @@ const markAsReadToolDefinition: Tool = {
 
 const getActivityToolDefinition: Tool = {
   name: 'teams_get_activity',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the user\'s activity feed - mentions, reactions, replies, and other notifications. Returns recent activity items with sender, content, and source conversation context. Pass syncState from a previous response to get only newer items.',
   inputSchema: {
     type: 'object',
@@ -393,6 +406,7 @@ const getActivityToolDefinition: Tool = {
 
 const searchEmojiToolDefinition: Tool = {
   name: 'teams_search_emoji',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Search for emojis by name or keyword. Returns both standard Teams emojis and custom organisation emojis, indicating which is which. Use the returned key with teams_add_reaction.',
   inputSchema: {
     type: 'object',
@@ -408,6 +422,7 @@ const searchEmojiToolDefinition: Tool = {
 
 const addReactionToolDefinition: Tool = {
   name: 'teams_add_reaction',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Add an emoji reaction to a message. Common reactions: like (👍), heart (❤️), laugh (😂), surprised (😮), sad (😢), angry (😠). Use teams_search_emoji to find other emojis.',
   inputSchema: {
     type: 'object',
@@ -431,6 +446,7 @@ const addReactionToolDefinition: Tool = {
 
 const removeReactionToolDefinition: Tool = {
   name: 'teams_remove_reaction',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Remove an emoji reaction from a message.',
   inputSchema: {
     type: 'object',
@@ -454,6 +470,7 @@ const removeReactionToolDefinition: Tool = {
 
 const getSavedMessagesToolDefinition: Tool = {
   name: 'teams_get_saved_messages',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the list of messages the user has saved (bookmarked) in Teams. Returns references to saved messages with source conversation IDs and direct links. Use teams_get_message with sourceConversationId and sourceMessageId to fetch the full message content.',
   inputSchema: {
     type: 'object',
@@ -468,6 +485,7 @@ const getSavedMessagesToolDefinition: Tool = {
 
 const getFollowedThreadsToolDefinition: Tool = {
   name: 'teams_get_followed_threads',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the list of threads the user is following in Teams. Returns references to followed threads with source conversation IDs and direct links. Use teams_get_message with sourceConversationId and sourcePostId to fetch the full post, or teams_get_thread for the full thread.',
   inputSchema: {
     type: 'object',
@@ -482,6 +500,7 @@ const getFollowedThreadsToolDefinition: Tool = {
 
 const getMessageToolDefinition: Tool = {
   name: 'teams_get_message',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get a single message by ID with full content. Works for messages of any age - no retention limit. Includes reactions (individual reactors) and reactionSummary (counts per emoji) when present. Use this to resolve truncated search results, saved message stubs, or retrieve any specific message when you have the conversationId and messageId.',
   inputSchema: {
     type: 'object',
@@ -501,6 +520,7 @@ const getMessageToolDefinition: Tool = {
 
 const listChatsToolDefinition: Tool = {
   name: 'teams_list_chats',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'List the user\'s recent conversations (1:1 chats, group chats, meetings and channels), newest activity first. Returns conversationId, chatType (oneOnOne/group/meeting/channel), topic, and a preview of the last message (sender, time, text). Use the returned conversationId with teams_get_thread to read messages or teams_send_message to reply. This is the fastest way to discover active chat IDs without a search.',
   inputSchema: {
     type: 'object',
@@ -515,6 +535,7 @@ const listChatsToolDefinition: Tool = {
 
 const waitForReplyToolDefinition: Tool = {
   name: 'teams_wait_for_reply',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Block until a new message arrives in a conversation, then return only the new messages. Polls server-side so you make one tool call instead of repeatedly reading the thread. Read-only and idempotent: it never posts (pair it with teams_send_message), and re-running with after=nextAfter resumes from the same point. The block is capped (~110s) to stay under client timeouts; on timeout it returns timedOut=true with nextAfter — just call again to keep waiting. By default the baseline is your most recent message, so after a teams_send_message you can call this with no "after" to wait for the reply.',
   inputSchema: {
     type: 'object',
