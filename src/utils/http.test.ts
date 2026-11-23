@@ -295,4 +295,39 @@ describe('clearRateLimitState', () => {
 
     vi.unstubAllGlobals();
   });
+
 });
+
+describe('error body truncation', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    clearRateLimitState();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('caps a long error body at MAX_ERROR_BODY_CHARS plus a truncation marker', async () => {
+    const body = 'E'.repeat(1000);
+    vi.mocked(fetch).mockImplementation(async () => new Response(body, { status: 500 }));
+
+    const result = await httpRequest('https://api.example.com/fail', { maxRetries: 1 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain('E'.repeat(300) + '… [truncated]');
+      expect(result.error.message).not.toContain('E'.repeat(301));
+    }
+  });
+
+  it('leaves a short error body unchanged', async () => {
+    vi.mocked(fetch).mockImplementation(async () => new Response('short failure', { status: 500 }));
+
+    const result = await httpRequest('https://api.example.com/fail', { maxRetries: 1 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain('HTTP 500: short failure');
+    }
+  });});

@@ -12,6 +12,9 @@
 /** Minimum content length to be considered valid (characters). */
 export const MIN_CONTENT_LENGTH = 5;
 
+/** Maximum characters of an HTTP error response body kept in error messages (and therefore logs). */
+export const MAX_ERROR_BODY_CHARS = 300;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pagination Defaults
 // ─────────────────────────────────────────────────────────────────────────────

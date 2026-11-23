@@ -10,6 +10,7 @@ import {
   type McpError,
 } from '../types/errors.js';
 import { type Result, ok, err } from '../types/result.js';
+import { MAX_ERROR_BODY_CHARS } from '../constants.js';
 
 /** Options for HTTP requests. */
 export interface HttpOptions extends Omit<RequestInit, 'signal'> {
@@ -133,7 +134,10 @@ async function fetchWithTimeout<T>(
     // Handle error responses
     if (!response.ok) {
       const retryAfterMs = extractRetryAfter(response.headers);
-      const errorText = await response.text().catch(() => '');
+      const rawErrorText = await response.text().catch(() => '');
+      const errorText = rawErrorText.length > MAX_ERROR_BODY_CHARS
+        ? rawErrorText.slice(0, MAX_ERROR_BODY_CHARS) + '… [truncated]'
+        : rawErrorText;
       
       return err(createError(
         classifyHttpError(response.status, errorText),
