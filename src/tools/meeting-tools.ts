@@ -34,6 +34,7 @@ export const GetTranscriptInputSchema = z.object({
 
 const getMeetingsToolDefinition: Tool = {
   name: 'teams_get_meetings',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get meetings from your Teams calendar. Returns meetings with: subject, startTime, endTime, organizer (name/email), location, joinUrl (Teams link), threadId (use with teams_get_thread to read meeting chat), myResponse (None/Accepted/Tentative/Declined), showAs (Free/Busy), isOrganizer. Defaults to next 7 days from now. For past meetings (e.g., "summarise my last meeting"), set startDate to a past date. To find meetings with a person, get results and filter by organizer.email.',
   inputSchema: {
     type: 'object',
@@ -80,6 +81,7 @@ async function handleGetMeetings(
 
 const getTranscriptToolDefinition: Tool = {
   name: 'teams_get_transcript',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the transcript of a Teams meeting. Requires the meeting\'s threadId (from teams_get_meetings). Returns formatted transcript text with timestamps and speaker names, ready for reading or summarization. The meeting must have had transcription enabled. Optionally pass meetingDate (ISO string, e.g. the startTime from teams_get_meetings) to narrow the search.',
   inputSchema: {
     type: 'object',

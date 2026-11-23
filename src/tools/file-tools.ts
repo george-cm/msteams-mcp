@@ -35,6 +35,7 @@ export const DownloadFileInputSchema = z.object({
 
 const getSharedFilesToolDefinition: Tool = {
   name: 'teams_get_shared_files',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get files and links shared in a Teams conversation. Returns file names, URLs, extensions, sizes, and who shared them. Works for channels, group chats, 1:1 chats, and meeting chats. Use the conversationId from other tools (teams_get_favorites, teams_search, teams_find_channel, teams_get_chat). Supports pagination via skipToken for conversations with many files. To save the contents of a File item locally, pass its webUrl to teams_download_file.',
   inputSchema: {
     type: 'object',
@@ -88,13 +89,14 @@ export const getSharedFilesTool: RegisteredTool<typeof GetSharedFilesInputSchema
 
 const downloadFileToolDefinition: Tool = {
   name: 'teams_download_file',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description:
-    "Download a Teams file to a local path. Accepts the webUrl of a File item from teams_get_shared_files (SharePoint/OneDrive: chat uploads and channel files, including Doc.aspx viewer links), or the fileUrl of an assignment attachment or submission file from teams_get_assignment (a Microsoft Graph drive-item URL). Link items, Microsoft Forms and non-SharePoint URLs are not files and cannot be downloaded. Saves the raw file to an absolute path on the MCP server machine and returns its name, size, content type and SHA-256. The parent directory must exist and existing files are never overwritten. Streams to disk with no size limit; a transfer that stalls for 30 seconds is cancelled and the partial file removed. Respects the owner's download block. Uses Microsoft Graph via the existing Teams session (no extra sign-in); if Graph is unavailable only this tool fails, and no other Teams tool is affected.",
+    "Download a Teams file into a restricted download directory. Accepts the webUrl of a File item from teams_get_shared_files (SharePoint/OneDrive: chat uploads and channel files, including Doc.aspx viewer links), or the fileUrl of an assignment attachment or submission file from teams_get_assignment (a Microsoft Graph drive-item URL). Link items, Microsoft Forms and non-SharePoint URLs are not files and cannot be downloaded. Files can only be saved inside the download root: the TEAMS_MCP_DOWNLOAD_DIR environment variable when set (it must be an absolute path), otherwise ~/Downloads/teams-mcp. Returns the file's name, saved path, size, content type and SHA-256. Relative paths may include subdirectories (created automatically inside the root); existing files are never overwritten. Streams to disk with no size limit; a transfer that stalls for 30 seconds is cancelled and the partial file removed. Respects the owner's download block. Uses Microsoft Graph via the existing Teams session (no extra sign-in); if Graph is unavailable only this tool fails, and no other Teams tool is affected.",
   inputSchema: {
     type: 'object',
     properties: {
       url: { type: 'string', description: "A File item's webUrl from teams_get_shared_files, or an attachment's fileUrl from teams_get_assignment." },
-      outputPath: { type: 'string', description: 'Absolute destination file path on the MCP server machine. Must not already exist; the parent directory must exist.' },
+      outputPath: { type: 'string', description: 'Destination file path. A relative path is resolved inside the download directory and may include subdirectories, which are created automatically; an absolute path is allowed only if it is inside that directory. Must not already exist.' },
     },
     required: ['url', 'outputPath'],
   },

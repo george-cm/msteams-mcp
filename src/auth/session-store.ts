@@ -11,22 +11,12 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { encrypt, decrypt } from './crypto.js';
+import { encrypt, decrypt, v2KeyAvailable, resetKeyCache, type EncryptedData } from './crypto.js';
+import { CONFIG_DIR, SESSION_STATE_PATH, TOKEN_CACHE_PATH } from './paths.js';
 import { SESSION_EXPIRY_HOURS, TEAMS_HOSTS } from '../constants.js';
 import * as log from '../utils/logger.js';
 
-/**
- * User-specific config directory for teams-mcp-server.
- * - Windows: %APPDATA%\teams-mcp-server\
- * - macOS/Linux: ~/.teams-mcp-server/
- */
-export const CONFIG_DIR = process.platform === 'win32'
-  ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'teams-mcp-server')
-  : path.join(os.homedir(), '.teams-mcp-server');
-export const SESSION_STATE_PATH = path.join(CONFIG_DIR, 'session-state.json');
-export const TOKEN_CACHE_PATH = path.join(CONFIG_DIR, 'token-cache.json');
+export { CONFIG_DIR, SESSION_STATE_PATH, TOKEN_CACHE_PATH };
 
 /** File permission mode: owner read/write only. */
 const SECURE_FILE_MODE = 0o600;
@@ -67,13 +57,38 @@ export interface TokenCache {
  * Writes data securely with encryption and file permissions.
  */
 function writeSecure(filePath: string, data: unknown): void {
+  // Never silently downgrade: if the existing file is v2-encrypted and the
+  // v2 key is currently unavailable, abort rather than overwrite it with a
+  // weaker v1 blob that re-exposes the data.
+  if (fs.existsSync(filePath)) {
+    let existing: EncryptedData | null = null;
+    try {
+      existing = JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData;
+    } catch { /* unparseable blob: the write below replaces it anyway */ }
+    if (existing?.version === 2 && !v2KeyAvailable()) {
+      log.warn('session-store', `Refusing to overwrite ${filePath}: it is v2-encrypted and the v2 key is unavailable`);
+      throw new Error(`Cannot overwrite ${filePath}: v2 encryption key unavailable`);
+    }
+  }
+
   const json = JSON.stringify(data, null, 2);
   const encrypted = encrypt(json);
-  
-  fs.writeFileSync(filePath, JSON.stringify(encrypted, null, 2), { 
-    mode: SECURE_FILE_MODE,
-    encoding: 'utf8',
-  });
+
+  // Atomic write: a crash mid-write must not leave a torn file. The temp
+  // file gets the restrictive mode at creation; rename then replaces the
+  // target in one step. On Windows renameSync fails if the target is
+  // locked — the temp file is cleaned up and the error propagates.
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(encrypted, null, 2), {
+      mode: SECURE_FILE_MODE,
+      encoding: 'utf8',
+    });
+    fs.renameSync(tmpPath, filePath);
+  } catch (error) {
+    try { fs.unlinkSync(tmpPath); } catch { /* never created or already moved */ }
+    throw error;
+  }
 }
 
 /**
@@ -83,11 +98,48 @@ function writeSecure(filePath: string, data: unknown): void {
 function readSecure<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(decrypt(JSON.parse(fs.readFileSync(filePath, 'utf8')))) as T;
+    const encrypted = JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData;
+    const data = JSON.parse(decrypt(encrypted)) as T;
+
+    migrateToV2IfUnchanged(filePath, encrypted, data);
+    return data;
   } catch (error) {
     log.error('session-store', `Failed to read ${filePath}: ${error instanceof Error ? error.message : error}`);
     return null;
   }
+}
+
+/**
+ * Migrates a parsed v1 file to v2 when a DPAPI-wrapped key is available.
+ * Re-reads the file first: if another process updated it since the parse
+ * (iv/tag no longer match), the newer blob is left alone rather than
+ * clobbered with our stale data. Failures are logged, never fatal.
+ */
+function migrateToV2IfUnchanged(filePath: string, parsed: EncryptedData, data: unknown): void {
+  if (parsed.version !== 1 || !v2KeyAvailable()) return;
+  try {
+    const current = JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData;
+    if (current.iv === parsed.iv && current.tag === parsed.tag) {
+      writeSecure(filePath, data);
+    }
+  } catch (error) {
+    log.warn('session-store', `Failed to re-encrypt ${filePath} with the v2 key: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+/** Test hook: read and decrypt an arbitrary secure file. */
+export function _readSecureForTesting<T>(filePath: string): T | null {
+  return readSecure<T>(filePath);
+}
+
+/** Test hook: run the v1→v2 migration step against an arbitrary file. */
+export function _migrateToV2IfUnchangedForTesting(filePath: string, parsed: EncryptedData, data: unknown): void {
+  migrateToV2IfUnchanged(filePath, parsed, data);
+}
+
+/** Test hook: encrypt and atomically write an arbitrary secure file. */
+export function _writeSecureForTesting(filePath: string, data: unknown): void {
+  writeSecure(filePath, data);
 }
 
 /**
@@ -127,6 +179,9 @@ export function clearSessionState(): void {
  */
 export function clearAllLocalData(): void {
   fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
+  // The key file is gone: drop the cached v2 key so the next encrypt()
+  // creates a fresh one instead of encrypting with a key no longer on disk.
+  resetKeyCache();
 }
 
 /**

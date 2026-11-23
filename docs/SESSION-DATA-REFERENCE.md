@@ -462,15 +462,29 @@ If API calls fail with 404 or redirect errors:
 **Files:**
 - `session-state.json` - Encrypted session (cookies + localStorage)
 - `token-cache.json` - Encrypted token cache
+- `key.dpapi` - DPAPI-wrapped AES key (Windows only; absent on other platforms)
 - `browser-profile/` - Persistent Chrome/Edge profile directory
+- `logs/server.log` - Durable log (rotated to `server.log.1` past 1 MB)
 
 ### Encryption
 
-Session files are encrypted at rest using AES-256-GCM with a key derived from:
-- Hostname
-- Username
+Session files are encrypted at rest using AES-256-GCM. Two key versions exist:
 
-This means session files are machine-specific and cannot be copied between computers.
+- **Version 2 (Windows)**: a random 32-byte key stored in `key.dpapi`,
+  wrapped with DPAPI (CurrentUser scope) so the key material is never on
+  disk in a derivable form.
+- **Version 1 (legacy fallback)**: a key derived via scrypt from
+  hostname + username, used when no key protector is available
+  (non-Windows, or a DPAPI call failure). v1 files are re-encrypted to v2
+  on read when DPAPI is available.
+
+DPAPI ties `key.dpapi` to the user's logon credential: it cannot be
+unwrapped without the user's password or a domain DPAPI backup key, and
+master keys can roam with a Roaming %APPDATA% profile. It does not cover
+`browser-profile/` (the MSAL refresh token there is unencrypted) and does
+not protect against other processes running as the same user. v1 files
+remain machine-specific: they cannot be decrypted on another computer or
+user account.
 
 ---
 

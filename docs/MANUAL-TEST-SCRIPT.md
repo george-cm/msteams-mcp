@@ -185,8 +185,9 @@ When reading channel messages with `teams_get_thread`:
 1. teams_get_favorites or teams_find_channel → get a conversationId
 2. teams_get_shared_files conversationId="..." → list files with names, URLs, sizes, who shared them
 3. Use skipToken from response to paginate if there are more files
-4. teams_download_file url="<a File item's webUrl>" outputPath="/tmp/file.docx" → saved file with size and SHA-256
-5. Repeat step 4 with the same outputPath → must fail (never overwrites)
+4. teams_download_file url="<a File item's webUrl>" outputPath="file.docx" → saved inside the download root, with size and SHA-256
+5. Repeat step 4 with the same outputPath → the 'never overwrites' check must be what fails (not a path error)
+6. teams_download_file url="<same webUrl>" outputPath="/tmp/file.docx" (or "C:\Temp\file.docx") → must fail: absolute paths outside the download root are rejected
 ```
 
 ### Search emails
@@ -224,8 +225,8 @@ Quick reactions: `like` (👍), `heart` (❤️), `laugh` (😂), `surprised` (�
 1. teams_list_assignments → active work, earliest due first
 2. teams_list_assignments nextLink="..." → next page; statusFilter comes from the link
 3. teams_get_assignment classId="..." assignmentId="..." → full detail and your submission
-4. teams_download_file url="<an attachment's fileUrl>" outputPath="/tmp/lesson.pptx" → saved file with size and SHA-256
-5. Repeat step 4 with the same outputPath → must fail (never overwrites)
+4. teams_download_file url="<an attachment's fileUrl>" outputPath="lesson.pptx" → saved inside the download root, with size and SHA-256
+5. Repeat step 4 with the same outputPath → the 'never overwrites' check must be what fails (not a path error)
 6. teams_submission_action action="view" classId="..." assignmentId="..." submissionId="..." → mark viewed
 ```
 Forms and links have a `url` but no `fileUrl`; they cannot be downloaded.

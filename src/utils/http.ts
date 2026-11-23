@@ -10,6 +10,18 @@ import {
   type McpError,
 } from '../types/errors.js';
 import { type Result, ok, err } from '../types/result.js';
+import { MAX_ERROR_BODY_CHARS } from '../constants.js';
+
+/**
+ * Caps an upstream error body for error messages (and therefore logs).
+ * Classification should always see the untruncated body: keyword checks
+ * need text that may sit beyond the cap.
+ */
+export function truncateErrorBody(text: string): string {
+  return text.length > MAX_ERROR_BODY_CHARS
+    ? text.slice(0, MAX_ERROR_BODY_CHARS) + '… [truncated]'
+    : text;
+}
 
 /** Options for HTTP requests. */
 export interface HttpOptions extends Omit<RequestInit, 'signal'> {
@@ -133,10 +145,13 @@ async function fetchWithTimeout<T>(
     // Handle error responses
     if (!response.ok) {
       const retryAfterMs = extractRetryAfter(response.headers);
-      const errorText = await response.text().catch(() => '');
-      
+      const rawErrorText = await response.text().catch(() => '');
+      const errorText = truncateErrorBody(rawErrorText);
+
       return err(createError(
-        classifyHttpError(response.status, errorText),
+        // The full body goes to classification: keyword checks (timeout,
+        // ECONNRESET) must see text that may sit beyond the display cap.
+        classifyHttpError(response.status, rawErrorText),
         `HTTP ${response.status}: ${errorText || response.statusText}`,
         { retryAfterMs }
       ));

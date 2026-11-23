@@ -35,7 +35,8 @@ src/
 │   ├── assignment-tools.ts # EDU Assignments tools (list, get with attachments, submission actions)
 │   └── auth-tools.ts     # Login and status tools
 ├── auth/                 # Authentication and credential management
-│   ├── crypto.ts         # AES-256-GCM encryption for credentials at rest
+│   ├── crypto.ts         # AES-256-GCM encryption; DPAPI-wrapped key on Windows, legacy machine-derived fallback
+│   ├── paths.ts          # Config file locations (session state, token cache, DPAPI key)
 │   ├── session-store.ts  # Secure session state storage with encryption
 │   ├── token-extractor.ts # Extract tokens from Playwright session state
 │   ├── token-refresh.ts  # Token refresh orchestrator (HTTP-first, browser fallback)
@@ -74,7 +75,9 @@ src/
 │   ├── result.ts         # Result<T, E> type for explicit error handling
 │   └── api-responses.ts  # Typed interfaces for raw API response shapes
 ├── __fixtures__/
-│   └── api-responses.ts  # Mock API responses for testing
+│   ├── api-responses.ts  # Mock API responses for testing
+│   ├── isolated-config-dir.ts  # Vitest setup: redirects APPDATA/HOME/USERPROFILE to a per-worker temp dir
+│   └── isolated-key-store.ts   # Vitest setup: points the crypto key store at a temp dir per test
 ```
 
 ## Implementation Patterns
@@ -115,7 +118,7 @@ All operations use direct API calls. A persistent browser profile (`~/.teams-mcp
 
 A saved session holds only the tokens the browser itself had acquired, and Teams JS mints some lazily — the CSA (chatsvcagg) token behind favorites is routinely absent right after SSO, including after a `forceNew` sign-in from scratch. `teams_login` therefore tops up: if any core credential (Substrate, Skype Spaces, CSA, messaging cookies) is missing it runs one HTTP refresh before returning, so `teams_status` is accurate immediately after login instead of recovering on some later call. The top-up is skipped when the session is already complete, and a failure is logged but never fails the login.
 
-Microsoft redirects Teams users to new hosts without warning (`teams.cloud.microsoft`, then `teams.chat.microsoft.com`), so every host check reads one list: `TEAMS_HOSTS` in `constants.ts`. A host missing from it makes `getAuthStatus()` report an unknown page on a session that is in fact signed in, and manual login then hangs with the window open until the 5-minute timeout. Login detection treats a live MSAL token as the proof of sign-in: new Teams renders none of the `data-tid` elements earlier versions exposed, so waiting on the DOM never completes.
+Microsoft redirects Teams users to new hosts without warning (`teams.cloud.microsoft`, then `teams.chat.microsoft.com`), so every host check reads one list: `TEAMS_HOSTS` in `constants.ts`. A host missing from it makes `getAuthStatus()` report an unknown page on a session that is in fact signed in, and manual login then hangs with the window open until the 5-minute timeout. The stakes are higher since session-derived service URLs were locked down: a `chatServiceAfd` on a missing/untrusted host now drops the whole `DISCOVER-REGION-GTM` config, so every regional API (chatsvc, csa, mt/part) fails until login produces a config on a listed host. Login detection treats a live MSAL token as the proof of sign-in: new Teams renders none of the `data-tid` elements earlier versions exposed, so waiting on the DOM never completes.
 
 The server uses the system browser via Playwright's `launchPersistentContext()` (Edge on Windows, Chrome on macOS/Linux; ~180MB saved vs bundled Chromium). Only one process can use the profile at a time (Chromium lock); the token-refresh module serializes refreshes to prevent concurrent access and session-state overwrites. If no system browser is found, the error suggests installing Chrome or running `npx playwright install chromium`.
 
@@ -157,7 +160,7 @@ Two layers work together:
 1. **Persistent browser profile** (`browser-profile/`): retains Microsoft session cookies, extensions, and autofill across launches; enables silent headless re-auth.
 2. **Encrypted session state** (`session-state.json`): Playwright `storageState()` output from which tokens are extracted for browserless API calls.
 
-Session state and token cache files are encrypted at rest with AES-256-GCM using a key derived from machine-specific values (hostname + username), stored with 0o600 permissions.
+Session state and token cache files are encrypted at rest with AES-256-GCM, stored with 0o600 permissions. On Windows the encryption key is a random 32-byte value held in `key.dpapi`, wrapped with DPAPI (CurrentUser scope); elsewhere it falls back to a legacy key derived from machine-specific values (hostname + username), and files written by that scheme remain readable (v1 files are re-encrypted to v2 on read when DPAPI is available). DPAPI ties `key.dpapi` to the user's logon credential: it cannot be unwrapped without that user's password or a domain DPAPI backup key — but DPAPI master keys roam with a Roaming %APPDATA% profile and can be unwrapped offline once the user's password is known. Coverage is narrow: `browser-profile/` (which holds the MSAL refresh token and session cookies) is NOT encrypted, and DPAPI does not protect against other processes running as the same user — it unprotects for any process in the same user context.
 
 ## MCP Tools
 
@@ -232,7 +235,7 @@ Run a subset with `npx vitest run src/utils/parsers.test.ts` (one file), `npx vi
 
 ### Extending
 
-**New tool**: pick the appropriate `src/tools/*.ts` file (or add a category), define a Zod input schema and the MCP tool definition, implement the handler returning `ToolResult`, export it into the module's `*Tools` array, and register a new category in `tools/registry.ts`. Back it with `Result<T, McpError>` API functions.
+**New tool**: pick the appropriate `src/tools/*.ts` file (or add a category), define a Zod input schema and the MCP tool definition — `annotations` with `readOnlyHint`/`destructiveHint` (plus `idempotentHint` where it clearly holds) are mandatory — implement the handler returning `ToolResult`, export it into the module's `*Tools` array, and register a new category in `tools/registry.ts`. A tool that deletes user data must also be added to `DESTRUCTIVE_TOOLS` in `tools/annotations.test.ts`. Back it with `Result<T, McpError>` API functions.
 
 **New API endpoint**: add the URL to `utils/api-config.ts`, add a function in the relevant `src/api/*.ts` using `httpRequest()`, and return `Result<T, McpError>`.
 
@@ -261,8 +264,7 @@ Session files live in a per-user config directory (consistent regardless of invo
 - **macOS/Linux**: `~/.teams-mcp-server/`
 - **Windows**: `%APPDATA%\teams-mcp-server\`
 
-Contents: `session-state.json` (encrypted session), `token-cache.json` (encrypted tokens), `browser-profile/` (persistent Chrome/Edge profile), `logs/server.log` (durable log, rotated to `server.log.1` past 1 MB). Dev-only: `./debug-output/` (gitignored screenshots/HTML). Reference docs: `docs/API-REFERENCE.md`, `docs/SESSION-DATA-REFERENCE.md`.
-
+Contents: `session-state.json` (encrypted session), `token-cache.json` (encrypted tokens), `key.dpapi` (DPAPI-wrapped encryption key, Windows only), `browser-profile/` (persistent Chrome/Edge profile), `logs/server.log` (durable log, rotated to `server.log.1` past 1 MB). Dev-only: `./debug-output/` (gitignored screenshots/HTML). Reference docs: `docs/API-REFERENCE.md`, `docs/SESSION-DATA-REFERENCE.md`.
 ### Message deep links
 
 Teams needs different deep-link formats per conversation type:

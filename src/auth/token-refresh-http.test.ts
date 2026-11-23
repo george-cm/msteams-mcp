@@ -312,6 +312,26 @@ describe('refreshTokensViaHttp', () => {
     }
   });
 
+  it('caps a long Azure AD error body in the error message', async () => {
+    const state = makeMockSessionState();
+    vi.mocked(readSessionState).mockReturnValue(state);
+    vi.mocked(getTeamsOrigin).mockReturnValue(state.origins[0]);
+
+    // A JSON body with `error` but no error_description takes the
+    // `${error}: ${errorText}` branch — the body must be truncated.
+    const body = JSON.stringify({ error: 'server_error', pad: 'x'.repeat(500) });
+    vi.mocked(fetch).mockResolvedValue(new Response(body, { status: 500 }));
+
+    const result = await refreshTokensViaHttp();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toContain('server_error');
+      expect(result.error.message).toContain('… [truncated]');
+      expect(result.error.message).not.toContain('x'.repeat(301));
+    }
+  });
+
   it.each([400, 401])('core refresh never requests Assignments even when it would fail with HTTP %s', async (status) => {
     const state = makeMockSessionState();
     vi.mocked(readSessionState).mockReturnValue(state);

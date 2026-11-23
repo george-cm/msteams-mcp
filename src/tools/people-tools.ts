@@ -40,6 +40,7 @@ export const GetPersonInputSchema = z.object({
 
 const getMeToolDefinition: Tool = {
   name: 'teams_get_me',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the current user\'s profile information including email, display name, and Teams ID. Useful for finding @mentions or identifying the current user.',
   inputSchema: {
     type: 'object',
@@ -49,6 +50,7 @@ const getMeToolDefinition: Tool = {
 
 const searchPeopleToolDefinition: Tool = {
   name: 'teams_search_people',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Search for people in Microsoft Teams by name or email. Returns matching users with display name, email, job title, and department. Useful for finding someone to message.',
   inputSchema: {
     type: 'object',
@@ -68,6 +70,7 @@ const searchPeopleToolDefinition: Tool = {
 
 const frequentContactsToolDefinition: Tool = {
   name: 'teams_get_frequent_contacts',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get the user\'s frequently contacted people, ranked by interaction frequency. Useful for resolving ambiguous names (e.g., "Rob" → which Rob?) by checking who the user commonly works with. Returns display name, email, job title, and department.',
   inputSchema: {
     type: 'object',
@@ -82,6 +85,7 @@ const frequentContactsToolDefinition: Tool = {
 
 const getPersonToolDefinition: Tool = {
   name: 'teams_get_person',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Get one or more people\'s profiles by MRI (e.g. "8:orgid:uuid"). Returns display name, email, job title, department, and company. Useful for resolving MRIs (e.g. from reactions or activity) to real identities. Pass multiple MRIs for batch lookup.',
   inputSchema: {
     type: 'object',

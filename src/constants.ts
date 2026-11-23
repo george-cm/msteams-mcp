@@ -12,6 +12,9 @@
 /** Minimum content length to be considered valid (characters). */
 export const MIN_CONTENT_LENGTH = 5;
 
+/** Maximum characters of an HTTP error response body kept in error messages (and therefore logs). */
+export const MAX_ERROR_BODY_CHARS = 300;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Pagination Defaults
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +168,9 @@ export const BROWSER_REFRESH_LAUNCH_TIMEOUT_MS = 30_000;
 
 /** Max wait for individual browser steps: evaluate, storageState, close (ms). */
 export const BROWSER_STEP_TIMEOUT_MS = 15_000;
+
+/** Max wait for one PowerShell DPAPI protect/unprotect call (ms). */
+export const DPAPI_CALL_TIMEOUT_MS = 30_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // User Identity

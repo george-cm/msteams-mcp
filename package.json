@@ -44,10 +44,10 @@
   "author": "Rob MacDonald",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "marked": "^18.0.14",
     "playwright": "^1.40.0",
-    "zod": "~3.23.0"
+    "zod": "~4.6.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

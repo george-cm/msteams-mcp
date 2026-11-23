@@ -61,6 +61,7 @@ export const SearchEmailInputSchema = z.object({
 
 const searchToolDefinition: Tool = {
   name: 'teams_search',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Search for messages in Microsoft Teams. Returns matching messages with sender, timestamp, content, conversationId (for replies), and pagination info. Supports operators: from:email, to:name, sent:YYYY-MM-DD, sent:today, is:Messages, is:Meetings, is:Channels, is:Chats, hasattachment:true, "Name" for @mentions. The in:channel operator only works reliably when combined with content (e.g., "meeting in:IT Support"). Combine with NOT to exclude. Results sorted by recency.',
   inputSchema: {
     type: 'object',
@@ -88,6 +89,7 @@ const searchToolDefinition: Tool = {
 
 const getThreadToolDefinition: Tool = {
   name: 'teams_get_thread',
+  annotations: { readOnlyHint: false, destructiveHint: false },
   description: 'Get messages from a Teams conversation/thread. Default: newest-first (latest messages at top). For channels: messages include isThreadReply (true for replies) and threadRootId (ID of the post being replied to). Messages without threadRootId are top-level posts. Use threadRootId to group related messages. Messages include reactions (individual reactors, names resolved where possible) and reactionSummary (counts per emoji) when present. Each message includes a "when" field with the day of week (e.g., "Friday, January 30, 2026, 10:45 AM UTC"). Returns unread count and can optionally mark as read. Pass olderCursor back as cursor to page through older history.',
   inputSchema: {
     type: 'object',
@@ -131,6 +133,7 @@ const getThreadToolDefinition: Tool = {
 
 const findChannelToolDefinition: Tool = {
   name: 'teams_find_channel',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Find Teams channels by name. Searches both (1) channels in teams you\'re a member of (reliable) and (2) channels across the organisation (discovery). Results indicate whether you\'re already a member via the isMember field. Channel IDs can be used with teams_get_thread to read messages.',
   inputSchema: {
     type: 'object',
@@ -150,6 +153,7 @@ const findChannelToolDefinition: Tool = {
 
 const searchEmailToolDefinition: Tool = {
   name: 'teams_search_email',
+  annotations: { readOnlyHint: true, destructiveHint: false },
   description: 'Search emails in the user\'s mailbox. Returns matching emails with subject, sender, recipients, timestamp, preview, read status, and pagination info. Supports the same search operators as Outlook: from:email, to:name, subject:"text", hasattachment:true, sent:YYYY-MM-DD, sent:>=YYYY-MM-DD, sent:today, is:read, is:unread. Results sorted by recency. Uses the same authentication as Teams — no additional login required.',
   inputSchema: {
     type: 'object',
