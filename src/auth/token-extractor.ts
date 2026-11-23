@@ -15,6 +15,7 @@ import {
   type SessionState,
 } from './session-store.js';
 import { parseJwtProfile, type UserProfile } from '../utils/parsers.js';
+import * as log from '../utils/logger.js';
 import { MRI_TYPE_PREFIX, ORGID_PREFIX, MRI_ORGID_PREFIX, ASSIGNMENTS_APP_ID, GRAPH_AUDIENCES, TEAMS_HOSTS } from '../constants.js';
 
 // ============================================================================
@@ -281,19 +282,24 @@ export function extractRegionConfig(state?: SessionState): RegionConfig | null {
 
     try {
       const data = JSON.parse(item.value) as { item?: Record<string, string> };
-      const middleTierUrl = data.item?.middleTier;
+      let middleTierUrl = data.item?.middleTier;
       const chatServiceUrl = data.item?.chatServiceAfd;
-      const csaServiceUrl = data.item?.chatSvcAggAfd;
-      
-      if (!chatServiceUrl) continue;
+      let csaServiceUrl = data.item?.chatSvcAggAfd;
 
-      // Extract Teams base URL from any of the URLs (chatServiceAfd is reliable)
-      let teamsBaseUrl = 'https://teams.microsoft.com'; // fallback
-      try {
-        const url = new URL(chatServiceUrl);
-        teamsBaseUrl = `${url.protocol}//${url.host}`;
-      } catch {
-        // Use fallback
+      // chatServiceAfd is the base chatsvc requests are sent to; an
+      // untrusted value must not be used at all.
+      if (!chatServiceUrl || !isTrustedServiceUrl(chatServiceUrl)) continue;
+
+      const teamsBaseUrl = new URL(chatServiceUrl).origin;
+
+      // middleTier/chatSvcAggAfd have fallbacks: warn and treat as absent.
+      if (middleTierUrl && !isTrustedServiceUrl(middleTierUrl)) {
+        log.warn('token-extractor', `Ignoring untrusted middleTier URL in DISCOVER-REGION-GTM: ${middleTierUrl}`);
+        middleTierUrl = undefined;
+      }
+      if (csaServiceUrl && !isTrustedServiceUrl(csaServiceUrl)) {
+        log.warn('token-extractor', `Ignoring untrusted chatSvcAggAfd URL in DISCOVER-REGION-GTM: ${csaServiceUrl}`);
+        csaServiceUrl = undefined;
       }
 
       // Extract region from chatServiceAfd (e.g., /api/chatsvc/amer or /api/chatsvc/uk)
@@ -342,13 +348,42 @@ export function extractRegionConfig(state?: SessionState): RegionConfig | null {
 }
 
 /**
+ * True when a hostname is a known Teams host (exact match or a subdomain:
+ * 'asyncgw.teams.microsoft.com' matches 'teams.microsoft.com').
+ */
+export function isTeamsHost(hostname: string | undefined): boolean {
+  if (!hostname) return false;
+  return TEAMS_HOSTS.some(host => hostname === host || hostname.endsWith('.' + host));
+}
+
+/**
  * True when a cookie domain sits on a known Teams host (leading '.'
  * stripped, exact or suffix match - keeps '.asyncgw.teams.microsoft.com').
  */
 function domainMatchesTeamsHosts(domain: string | undefined): boolean {
   if (!domain) return false;
-  const d = domain.startsWith('.') ? domain.slice(1) : domain;
-  return TEAMS_HOSTS.some(host => d === host || d.endsWith('.' + host));
+  return isTeamsHost(domain.startsWith('.') ? domain.slice(1) : domain);
+}
+
+/**
+ * True when a session-derived URL is safe to use as an API base: parses,
+ * is HTTPS, carries no credentials or explicit port, and sits on a known
+ * Teams host. These values become request URLs that tokens are attached to,
+ * so an injected 'https://teams.microsoft.com.evil.example' must not pass.
+ */
+function isTrustedServiceUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'https:'
+    && !parsed.username
+    && !parsed.password
+    && !parsed.port
+    && isTeamsHost(parsed.hostname);
 }
 
 /**
