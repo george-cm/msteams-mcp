@@ -158,8 +158,7 @@ describe('v1 to v2 file migration', () => {
       const rewritten = JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData;
       expect(rewritten.version).toBe(2);
     } finally {
-      _setKeyStoreForTesting(null);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+          fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });

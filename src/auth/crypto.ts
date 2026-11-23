@@ -78,6 +78,11 @@ function runDpapi(operation: 'Protect' | 'Unprotect', data: Buffer): Buffer {
 let keyProtector: KeyProtector | null = process.platform === 'win32' ? dpapiProtector : null;
 let keyPath = DEFAULT_KEY_PATH;
 
+/** Test hook: the key file path currently in effect. */
+export function _keyStorePathForTesting(): string {
+  return keyPath;
+}
+
 /**
  * Version 2 key state: undefined = not loaded yet, Buffer = ready,
  * 'unavailable' = protector failed or absent (use version 1 this process).

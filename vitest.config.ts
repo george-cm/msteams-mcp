@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    setupFiles: ['src/__fixtures__/isolated-key-store.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

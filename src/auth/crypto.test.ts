@@ -6,7 +6,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { encrypt, decrypt, _setKeyStoreForTesting, type EncryptedData, type KeyProtector } from './crypto.js';
+import { encrypt, decrypt, _setKeyStoreForTesting, _keyStorePathForTesting, type EncryptedData, type KeyProtector } from './crypto.js';
+import { CONFIG_DIR, KEY_PATH } from './paths.js';
 
 describe('encrypt/decrypt round-trip', () => {
   it('encrypts and decrypts a simple string', () => {
@@ -83,8 +84,7 @@ describe('v2 key store', () => {
   });
 
   afterEach(() => {
-    _setKeyStoreForTesting(null);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('round-trips with the v2 key', () => {
@@ -147,5 +147,12 @@ describe('v2 key store', () => {
 
     _setKeyStoreForTesting({ protector: null, keyPath });
     expect(() => decrypt(encrypted)).toThrow();
+  });
+});
+
+describe('test key-store isolation', () => {
+  it('does not use the real config directory for keys', () => {
+    expect(_keyStorePathForTesting()).not.toBe(KEY_PATH);
+    expect(_keyStorePathForTesting().startsWith(CONFIG_DIR + path.sep)).toBe(false);
   });
 });
