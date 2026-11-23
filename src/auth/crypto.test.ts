@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { encrypt, decrypt, _setKeyStoreForTesting, _keyStorePathForTesting, type EncryptedData, type KeyProtector } from './crypto.js';
+import { encrypt, decrypt, _setKeyStoreForTesting, _keyStorePathForTesting, _dpapiInvocationForTesting, type EncryptedData, type KeyProtector } from './crypto.js';
 import { CONFIG_DIR, KEY_PATH } from './paths.js';
 
 describe('encrypt/decrypt round-trip', () => {
@@ -133,6 +133,58 @@ describe('v2 key store', () => {
     expect(fs.readFileSync(keyPath, 'utf8')).toBe(blob);
   });
 
+  it('retries after a transient protector failure instead of caching it', () => {
+    encrypt('first'); // creates a valid key file
+    let calls = 0;
+    _setKeyStoreForTesting({
+      protector: {
+        protect: stubProtector.protect,
+        unprotect: (data: Buffer) => {
+          calls++;
+          if (calls === 1) throw new Error('transient powershell failure');
+          return stubProtector.unprotect(data);
+        },
+      },
+      keyPath,
+    });
+
+    // First call fails and is NOT cached: v1 output for this call only.
+    expect(encrypt('during outage').version).toBe(1);
+    // Next call retries, loads the key file, and emits v2 again.
+    const recovered = encrypt('after recovery');
+    expect(recovered.version).toBe(2);
+    expect(decrypt(recovered)).toBe('after recovery');
+    expect(calls).toBe(2);
+  });
+
+  it('adopts the existing key file when another process wins creation', () => {
+    const racedKey = Buffer.alloc(32, 7);
+    const racedBlob = stubProtector.protect(racedKey).toString('base64');
+    _setKeyStoreForTesting({
+      protector: {
+        // Simulates a second process writing key.dpapi between our
+        // existsSync check and our atomic link.
+        protect: (data: Buffer) => {
+          fs.writeFileSync(keyPath, racedBlob, { mode: 0o600 });
+          return stubProtector.protect(data);
+        },
+        unprotect: stubProtector.unprotect,
+      },
+      keyPath,
+    });
+
+    const encrypted = encrypt('raced');
+    expect(encrypted.version).toBe(2);
+    // The winner's file and key are adopted, not overwritten.
+    expect(fs.readFileSync(keyPath, 'utf8')).toBe(racedBlob);
+    expect(stubProtector.unprotect(Buffer.from(racedBlob, 'base64'))).toEqual(racedKey);
+    // No temp file lingers.
+    expect(fs.readdirSync(tmpDir)).toEqual(['key.dpapi']);
+    // A fresh process loading that file decrypts the data.
+    _setKeyStoreForTesting({ protector: stubProtector, keyPath });
+    expect(decrypt(encrypted)).toBe('raced');
+  });
+
   it('emits v1 when the protector is null', () => {
     _setKeyStoreForTesting({ protector: null, keyPath });
     const encrypted = encrypt('plain legacy');
@@ -147,6 +199,16 @@ describe('v2 key store', () => {
 
     _setKeyStoreForTesting({ protector: null, keyPath });
     expect(() => decrypt(encrypted)).toThrow();
+  });
+});
+
+describe('DPAPI invocation', () => {
+  it('resolves powershell.exe to an absolute path under SystemRoot', () => {
+    const { command, cwd } = _dpapiInvocationForTesting();
+    // Always win32 semantics: the path embeds C:\Windows when SystemRoot is unset.
+    expect(path.win32.isAbsolute(command)).toBe(true);
+    expect(command).toContain(path.win32.join('WindowsPowerShell', 'v1.0', 'powershell.exe'));
+    expect(cwd).toBe(process.env.SystemRoot);
   });
 });
 

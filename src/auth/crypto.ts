@@ -55,6 +55,22 @@ export const dpapiProtector: KeyProtector = {
   },
 };
 
+/**
+ * Absolute path to the Windows PowerShell executable. A bare
+ * 'powershell.exe' would be resolved against the current working
+ * directory before PATH, which makes it plantable by anything that can
+ * write there.
+ */
+const POWERSHELL_EXE = path.join(
+  process.env.SystemRoot ?? 'C:\\Windows',
+  'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'
+);
+
+/** Test hook: the command and working directory runDpapi invokes. */
+export function _dpapiInvocationForTesting(): { command: string; cwd: string | undefined } {
+  return { command: POWERSHELL_EXE, cwd: process.env.SystemRoot };
+}
+
 function runDpapi(operation: 'Protect' | 'Unprotect', data: Buffer): Buffer {
   const script = [
     'Add-Type -AssemblyName System.Security',
@@ -66,9 +82,9 @@ function runDpapi(operation: 'Protect' | 'Unprotect', data: Buffer): Buffer {
   ].join('; ');
 
   const output = execFileSync(
-    'powershell.exe',
+    POWERSHELL_EXE,
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { input: data.toString('base64'), encoding: 'utf8', timeout: 30000, windowsHide: true }
+    { input: data.toString('base64'), encoding: 'utf8', timeout: 30000, windowsHide: true, cwd: process.env.SystemRoot }
   );
 
   return Buffer.from(output.trim(), 'base64');
@@ -85,9 +101,17 @@ export function _keyStorePathForTesting(): string {
 
 /**
  * Version 2 key state: undefined = not loaded yet, Buffer = ready,
- * 'unavailable' = protector failed or absent (use version 1 this process).
+ * 'unavailable' = no key protector exists on this platform (use version 1
+ * this process). A configured protector that FAILS is never cached as
+ * 'unavailable' — the next call retries, so a transient PowerShell error
+ * can't pin the process onto the weaker v1 key.
  */
 let v2Key: Buffer | 'unavailable' | undefined;
+
+/** Drops the cached v2 key so the next call reloads (or recreates) it. */
+export function resetKeyCache(): void {
+  v2Key = undefined;
+}
 
 /**
  * Test hook: swap the key protector and key file location. Pass null to
@@ -105,8 +129,9 @@ export function _setKeyStoreForTesting(
 
 /**
  * Loads or creates the version 2 key. On any failure the key file is left
- * untouched (a transient PowerShell failure must not destroy it) and the
- * process falls back to the version 1 key.
+ * untouched (a transient PowerShell failure must not destroy it) and this
+ * call falls back to the version 1 key — the failure is not cached, so the
+ * next call retries.
  */
 function getV2Key(): Buffer | 'unavailable' {
   if (v2Key !== undefined) return v2Key;
@@ -120,19 +145,38 @@ function getV2Key(): Buffer | 'unavailable' {
     if (fs.existsSync(keyPath)) {
       const blob = fs.readFileSync(keyPath, 'utf8');
       v2Key = keyProtector.unprotect(Buffer.from(blob.trim(), 'base64'));
-    } else {
-      const key = crypto.randomBytes(32);
-      const blob = keyProtector.protect(key);
-      fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
-      fs.writeFileSync(keyPath, blob.toString('base64'), { flag: 'wx', mode: 0o600 });
-      v2Key = key;
+      return v2Key;
     }
-  } catch (error) {
-    log.warn('crypto', `DPAPI key store unavailable, falling back to legacy key: ${error instanceof Error ? error.message : error}`);
-    v2Key = 'unavailable';
-  }
 
-  return v2Key;
+    const key = crypto.randomBytes(32);
+    const blob = keyProtector.protect(key);
+    fs.mkdirSync(path.dirname(keyPath), { recursive: true, mode: 0o700 });
+
+    // Atomic creation: link fails with EEXIST if another process created
+    // the key first, in which case the existing file is adopted rather
+    // than overwritten (each process could otherwise end up encrypting
+    // with a key the file no longer holds).
+    const tmpPath = `${keyPath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpPath, blob.toString('base64'), { mode: 0o600 });
+    try {
+      fs.linkSync(tmpPath, keyPath);
+    } catch (linkError) {
+      if ((linkError as NodeJS.ErrnoException).code !== 'EEXIST') throw linkError;
+      const existing = fs.readFileSync(keyPath, 'utf8');
+      v2Key = keyProtector.unprotect(Buffer.from(existing.trim(), 'base64'));
+      return v2Key;
+    } finally {
+      try { fs.unlinkSync(tmpPath); } catch { /* already linked or never created */ }
+    }
+    v2Key = key;
+    return v2Key;
+  } catch (error) {
+    // Transient failure (PowerShell error, unreadable file, timeout):
+    // report 'unavailable' for this call only — v2Key is left undefined so
+    // the next call retries instead of sticking on the legacy key.
+    log.warn('crypto', `DPAPI key store unavailable, falling back to legacy key: ${error instanceof Error ? error.message : error}`);
+    return 'unavailable';
+  }
 }
 
 /** True when a version 2 key can be used for encryption in this process. */
