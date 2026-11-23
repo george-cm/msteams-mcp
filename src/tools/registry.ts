@@ -13,7 +13,7 @@ import { ErrorCode, createError } from '../types/errors.js';
 interface RegistryEntry {
   definition: Tool;
   schema: z.ZodTypeAny;
-  handler: (input: z.output<z.ZodTypeAny>) => Promise<ToolResult>;
+  handler: (input: never) => Promise<ToolResult>;
 }
 
 import { searchTools } from './search-tools.js';
@@ -100,7 +100,7 @@ export async function invokeTool(name: string, args: unknown): Promise<ToolResul
   }
 
   // Invoke handler
-  return tool.handler(parseResult.data);
+  return tool.handler(parseResult.data as never);
 }
 
 /**
