@@ -35,7 +35,8 @@ src/
 │   ├── assignment-tools.ts # EDU Assignments tools (list, get with attachments, submission actions)
 │   └── auth-tools.ts     # Login and status tools
 ├── auth/                 # Authentication and credential management
-│   ├── crypto.ts         # AES-256-GCM encryption for credentials at rest
+│   ├── crypto.ts         # AES-256-GCM encryption; DPAPI-wrapped key on Windows, legacy machine-derived fallback
+│   ├── paths.ts          # Config file locations (session state, token cache, DPAPI key)
 │   ├── session-store.ts  # Secure session state storage with encryption
 │   ├── token-extractor.ts # Extract tokens from Playwright session state
 │   ├── token-refresh.ts  # Token refresh orchestrator (HTTP-first, browser fallback)
@@ -157,7 +158,7 @@ Two layers work together:
 1. **Persistent browser profile** (`browser-profile/`): retains Microsoft session cookies, extensions, and autofill across launches; enables silent headless re-auth.
 2. **Encrypted session state** (`session-state.json`): Playwright `storageState()` output from which tokens are extracted for browserless API calls.
 
-Session state and token cache files are encrypted at rest with AES-256-GCM using a key derived from machine-specific values (hostname + username), stored with 0o600 permissions.
+Session state and token cache files are encrypted at rest with AES-256-GCM, stored with 0o600 permissions. On Windows the encryption key is a random 32-byte value held in `key.dpapi`, wrapped with DPAPI (CurrentUser scope); elsewhere it falls back to a legacy key derived from machine-specific values (hostname + username), and files written by that scheme remain readable (v1 files are re-encrypted to v2 on read when DPAPI is available). DPAPI protects the files against offline theft (copied directories, backups): the key cannot be unwrapped on another machine or account. It does NOT protect against other processes running as the same user — DPAPI unprotects for any process in the same user context.
 
 ## MCP Tools
 
@@ -261,8 +262,7 @@ Session files live in a per-user config directory (consistent regardless of invo
 - **macOS/Linux**: `~/.teams-mcp-server/`
 - **Windows**: `%APPDATA%\teams-mcp-server\`
 
-Contents: `session-state.json` (encrypted session), `token-cache.json` (encrypted tokens), `browser-profile/` (persistent Chrome/Edge profile), `logs/server.log` (durable log, rotated to `server.log.1` past 1 MB). Dev-only: `./debug-output/` (gitignored screenshots/HTML). Reference docs: `docs/API-REFERENCE.md`, `docs/SESSION-DATA-REFERENCE.md`.
-
+Contents: `session-state.json` (encrypted session), `token-cache.json` (encrypted tokens), `key.dpapi` (DPAPI-wrapped encryption key, Windows only), `browser-profile/` (persistent Chrome/Edge profile), `logs/server.log` (durable log, rotated to `server.log.1` past 1 MB). Dev-only: `./debug-output/` (gitignored screenshots/HTML). Reference docs: `docs/API-REFERENCE.md`, `docs/SESSION-DATA-REFERENCE.md`.
 ### Message deep links
 
 Teams needs different deep-link formats per conversation type:

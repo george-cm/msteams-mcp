@@ -11,22 +11,12 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { encrypt, decrypt } from './crypto.js';
+import { encrypt, decrypt, v2KeyAvailable, type EncryptedData } from './crypto.js';
+import { CONFIG_DIR, SESSION_STATE_PATH, TOKEN_CACHE_PATH } from './paths.js';
 import { SESSION_EXPIRY_HOURS, TEAMS_HOSTS } from '../constants.js';
 import * as log from '../utils/logger.js';
 
-/**
- * User-specific config directory for teams-mcp-server.
- * - Windows: %APPDATA%\teams-mcp-server\
- * - macOS/Linux: ~/.teams-mcp-server/
- */
-export const CONFIG_DIR = process.platform === 'win32'
-  ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'teams-mcp-server')
-  : path.join(os.homedir(), '.teams-mcp-server');
-export const SESSION_STATE_PATH = path.join(CONFIG_DIR, 'session-state.json');
-export const TOKEN_CACHE_PATH = path.join(CONFIG_DIR, 'token-cache.json');
+export { CONFIG_DIR, SESSION_STATE_PATH, TOKEN_CACHE_PATH };
 
 /** File permission mode: owner read/write only. */
 const SECURE_FILE_MODE = 0o600;
@@ -83,11 +73,29 @@ function writeSecure(filePath: string, data: unknown): void {
 function readSecure<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(decrypt(JSON.parse(fs.readFileSync(filePath, 'utf8')))) as T;
+    const encrypted = JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData;
+    const data = JSON.parse(decrypt(encrypted)) as T;
+
+    // Migrate legacy (version 1) files to version 2 when a DPAPI-wrapped key
+    // is available. Migration failures are logged, never fatal.
+    if (encrypted.version === 1 && v2KeyAvailable()) {
+      try {
+        writeSecure(filePath, data);
+      } catch (error) {
+        log.warn('session-store', `Failed to re-encrypt ${filePath} with the v2 key: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+
+    return data;
   } catch (error) {
     log.error('session-store', `Failed to read ${filePath}: ${error instanceof Error ? error.message : error}`);
     return null;
   }
+}
+
+/** Test hook: read and decrypt an arbitrary secure file. */
+export function _readSecureForTesting<T>(filePath: string): T | null {
+  return readSecure<T>(filePath);
 }
 
 /**

@@ -4,7 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getTeamsOrigin, type SessionState } from './session-store.js';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { getTeamsOrigin, _readSecureForTesting, type SessionState } from './session-store.js';
+import { encrypt, _setKeyStoreForTesting, type EncryptedData, type KeyProtector } from './crypto.js';
 
 function makeOrigin(
   origin: string,
@@ -128,5 +132,34 @@ describe('getTeamsOrigin', () => {
     };
 
     expect(getTeamsOrigin(state)).toBeNull();
+  });
+});
+
+describe('v1 to v2 file migration', () => {
+  it('rewrites a v1 file as v2 on read when a protector is available', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'teams-mcp-store-'));
+    const filePath = path.join(tmpDir, 'token-cache.json');
+    const keyPath = path.join(tmpDir, 'key.dpapi');
+    const stubProtector: KeyProtector = {
+      protect: (data: Buffer) => Buffer.from(data.map(b => b ^ 0xa5).reverse()),
+      unprotect: (data: Buffer) => Buffer.from(data.map(b => b ^ 0xa5).reverse()),
+    };
+
+    try {
+      // Write a v1-encrypted file (no protector).
+      _setKeyStoreForTesting({ protector: null, keyPath });
+      const cache = { substrateToken: 'tok', substrateTokenExpiry: 1, extractedAt: 2 };
+      fs.writeFileSync(filePath, JSON.stringify(encrypt(JSON.stringify(cache))));
+      expect((JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData).version).toBe(1);
+
+      // Read it back through the store with a protector: file becomes v2.
+      _setKeyStoreForTesting({ protector: stubProtector, keyPath });
+      expect((_readSecureForTesting(filePath))).toEqual(cache);
+      const rewritten = JSON.parse(fs.readFileSync(filePath, 'utf8')) as EncryptedData;
+      expect(rewritten.version).toBe(2);
+    } finally {
+      _setKeyStoreForTesting(null);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
