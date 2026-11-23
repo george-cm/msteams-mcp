@@ -36,10 +36,12 @@ beforeEach(async () => {
   fetchMock.mockImplementation(async () => new Response(BYTES, { status: 200, headers: { 'content-type': 'application/octet-stream' } }));
   vi.stubGlobal('fetch', fetchMock);
   dir = await mkdtemp(join(tmpdir(), 'graph-files-'));
+  process.env.TEAMS_MCP_DOWNLOAD_DIR = dir;
 });
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  delete process.env.TEAMS_MCP_DOWNLOAD_DIR;
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -55,7 +57,8 @@ describe('downloadFile', () => {
       sha256: createHash('sha256').update(BYTES).digest('hex'),
     }));
     expect(await readFile(out)).toEqual(BYTES);
-    expect((await stat(out)).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX mode bits; Node reports 0o666 for files there.
+    expect((await stat(out)).mode & 0o777).toBe(process.platform === 'win32' ? 0o666 : 0o600);
     const [metaUrl, metaOpts] = mockHttp.mock.calls[0];
     expect(new URL(metaUrl as string).searchParams.get('$select')).toContain('content.downloadUrl');
     expect((metaOpts as { headers: Record<string, string> }).headers.Authorization).toBe('Bearer graph-token');
@@ -108,9 +111,40 @@ describe('downloadFile', () => {
     expect(requireGraphTokenAsync).not.toHaveBeenCalled();
   });
 
-  it('requires an absolute output path', async () => {
-    expect(await downloadFile(FILE_URL, 'relative.pptx')).toMatchObject({ ok: false, error: { code: ErrorCode.INVALID_INPUT } });
+  it('rejects an absolute output path outside the download root', async () => {
+    const outside = join(tmpdir(), 'outside-root.pptx');
+    expect(await downloadFile(FILE_URL, outside)).toMatchObject({ ok: false, error: { code: ErrorCode.INVALID_INPUT } });
     expect(requireGraphTokenAsync).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a path that escapes the root through ".."', async () => {
+    for (const out of [join(dir, '..', 'escape.pptx'), join('..', 'escape.pptx'), 'sub/../../escape.pptx']) {
+      expect(await downloadFile(FILE_URL, out)).toMatchObject({ ok: false, error: { code: ErrorCode.INVALID_INPUT } });
+    }
+    expect(requireGraphTokenAsync).not.toHaveBeenCalled();
+  });
+
+  it('resolves a relative name inside the download root', async () => {
+    mockHttp.mockResolvedValue(item());
+    const result = await downloadFile(FILE_URL, 'relative.pptx');
+    expect(result).toMatchObject({ ok: true, value: { outputPath: join(dir, 'relative.pptx') } });
+    expect(await readFile(join(dir, 'relative.pptx'))).toEqual(BYTES);
+  });
+
+  it('errors when TEAMS_MCP_DOWNLOAD_DIR is not absolute', async () => {
+    process.env.TEAMS_MCP_DOWNLOAD_DIR = 'not-absolute';
+    expect(await downloadFile(FILE_URL, 'x.pptx')).toMatchObject({ ok: false, error: { code: ErrorCode.INVALID_INPUT } });
+    expect(requireGraphTokenAsync).not.toHaveBeenCalled();
+  });
+
+  (process.platform === 'win32' ? it : it.skip)('accepts a differently-cased path inside the root and rejects ADS names', async () => {
+    mockHttp.mockResolvedValue(item());
+    const mixedCase = join(dir, 'MiXeD.pptx').split('').map((c, i) => (i % 2 ? c.toUpperCase() : c.toLowerCase())).join('');
+    expect(await downloadFile(FILE_URL, mixedCase)).toMatchObject({ ok: true });
+
+    expect(await downloadFile(FILE_URL, 'a.txt:stream')).toMatchObject({ ok: false, error: { code: ErrorCode.INVALID_INPUT } });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('never overwrites an existing file', async () => {

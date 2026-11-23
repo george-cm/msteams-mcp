@@ -18,8 +18,9 @@
  * server's auto-login.
  */
 
-import { open, unlink } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { open, unlink, mkdir, realpath } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -68,10 +69,54 @@ interface RawDriveItem {
 }
 
 /**
- * Downloads a file to `outputPath` (absolute; parent must exist; never
- * overwrites). `url` is a Graph drive-item URL or a SharePoint/OneDrive web
- * URL. Streams to disk, verifies the byte count against Graph's reported size,
- * and removes the partial file on any failure.
+ * Resolves `outputPath` to a destination inside the download root and checks
+ * containment. The root is `TEAMS_MCP_DOWNLOAD_DIR` (must be absolute) or
+ * `~/Downloads/teams-mcp`, created if missing. Relative paths resolve against
+ * the root; absolute paths must already be inside it. Containment is checked
+ * on real paths so `..` segments and junction/symlink escapes are rejected.
+ */
+async function resolveOutputPath(outputPath: string): Promise<Result<string>> {
+  const envDir = process.env.TEAMS_MCP_DOWNLOAD_DIR;
+  if (envDir !== undefined && !isAbsolute(envDir)) {
+    return err(createError(ErrorCode.INVALID_INPUT,
+      `TEAMS_MCP_DOWNLOAD_DIR must be an absolute path (got "${envDir}")`));
+  }
+  const root = envDir ?? join(homedir(), 'Downloads', 'teams-mcp');
+
+  const dest = isAbsolute(outputPath) ? outputPath : resolve(root, outputPath);
+
+  // A ':' in the file name is an NTFS alternate data stream, not a real file.
+  if (process.platform === 'win32' && basename(dest).includes(':')) {
+    return err(createError(ErrorCode.INVALID_INPUT,
+      `outputPath must be a file inside the download directory (${root}); ':' is not allowed in the file name`));
+  }
+
+  try {
+    await mkdir(root, { recursive: true });
+    const rootReal = await realpath(root);
+    const parentReal = await realpath(dirname(dest));
+    const [rootCmp, parentCmp] = process.platform === 'win32'
+      ? [rootReal.toLowerCase(), parentReal.toLowerCase()]
+      : [rootReal, parentReal];
+    const rel = relative(rootCmp, parentCmp);
+    if (rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) {
+      return err(createError(ErrorCode.INVALID_INPUT,
+        `outputPath must be inside the download directory (${root})`));
+    }
+  } catch (error) {
+    return err(createError(ErrorCode.INVALID_INPUT,
+      `Could not resolve destination inside the download directory (${root}): ${error instanceof Error ? error.message : String(error)}`,
+      { retryable: false, suggestions: ['The parent directory of outputPath must exist'] }));
+  }
+
+  return ok(dest);
+}
+
+/**
+ * Downloads a file to `outputPath` (resolved inside the download root; parent
+ * must exist; never overwrites). `url` is a Graph drive-item URL or a
+ * SharePoint/OneDrive web URL. Streams to disk, verifies the byte count
+ * against Graph's reported size, and removes the partial file on any failure.
  */
 export async function downloadFile(url: string, outputPath: string): Promise<Result<DownloadedFile>> {
   const itemUrl = toDriveItemUrl(url);
@@ -79,9 +124,9 @@ export async function downloadFile(url: string, outputPath: string): Promise<Res
     return err(createError(ErrorCode.INVALID_INPUT,
       'url must be a Microsoft Graph drive-item URL (https://graph.microsoft.com/v1.0/drives/{id}/items/{id}) or an HTTPS SharePoint/OneDrive file URL (*.sharepoint.com)'));
   }
-  if (!isAbsolute(outputPath)) {
-    return err(createError(ErrorCode.INVALID_INPUT, 'outputPath must be an absolute file path'));
-  }
+
+  const dest = await resolveOutputPath(outputPath);
+  if (!dest.ok) return dest;
 
   const tokenResult = await requireGraphTokenAsync();
   if (!tokenResult.ok) return tokenResult;
@@ -122,11 +167,11 @@ export async function downloadFile(url: string, outputPath: string): Promise<Res
     return err(createError(ErrorCode.API_ERROR, 'Microsoft Graph did not return a SharePoint download link for this file', { retryable: false }));
   }
 
-  const saved = await streamToFile(downloadUrl, outputPath, item.size);
+  const saved = await streamToFile(downloadUrl, dest.value, item.size);
   if (!saved.ok) return saved;
   return ok({
     name: item.name ?? '',
-    outputPath,
+    outputPath: dest.value,
     size: saved.value.size,
     contentType: saved.value.contentType ?? item.file.mimeType ?? 'application/octet-stream',
     sha256: saved.value.sha256,
