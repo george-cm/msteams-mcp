@@ -68,14 +68,41 @@ interface RawDriveItem {
   '@microsoft.graph.downloadUrl'?: string;
 }
 
+/** A resolved download destination: the root and the real (post-symlink) path. */
+interface ResolvedDest {
+  root: string;
+  dest: string;
+}
+
+/**
+ * True when `dest`'s parent directory is (real-path) contained in `root`.
+ * Junctions/symlinks are resolved on both sides before comparing, so a
+ * swapped parent can't smuggle the file out of the root.
+ */
+async function parentInsideRoot(root: string, dest: string): Promise<boolean> {
+  const [rootReal, parentReal] = await Promise.all([realpath(root), realpath(dirname(dest))]);
+  const [rootCmp, parentCmp] = process.platform === 'win32'
+    ? [rootReal.toLowerCase(), parentReal.toLowerCase()]
+    : [rootReal, parentReal];
+  const rel = relative(rootCmp, parentCmp);
+  return !(rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel));
+}
+
 /**
  * Resolves `outputPath` to a destination inside the download root and checks
  * containment. The root is `TEAMS_MCP_DOWNLOAD_DIR` (must be absolute) or
  * `~/Downloads/teams-mcp`, created if missing. Relative paths resolve against
- * the root; absolute paths must already be inside it. Containment is checked
- * on real paths so `..` segments and junction/symlink escapes are rejected.
+ * the root (subdirectories are created); absolute paths must already be inside
+ * it.
+ *
+ * A lexical containment check runs FIRST, on unresolved paths: this rejects
+ * `..` escapes and UNC paths before any realpath() touches the filesystem —
+ * realpath on a `\\host\share` path would hit the network (SMB/NTLM). The
+ * real-path check then resolves junctions/symlinks, and the returned
+ * destination is `join(parentReal, basename(dest))`: the real directory plus
+ * the user's file name, never the raw input path.
  */
-async function resolveOutputPath(outputPath: string): Promise<Result<string>> {
+async function resolveOutputPath(outputPath: string): Promise<Result<ResolvedDest>> {
   const envDir = process.env.TEAMS_MCP_DOWNLOAD_DIR;
   if (envDir !== undefined && !isAbsolute(envDir)) {
     return err(createError(ErrorCode.INVALID_INPUT,
@@ -83,7 +110,22 @@ async function resolveOutputPath(outputPath: string): Promise<Result<string>> {
   }
   const root = envDir ?? join(homedir(), 'Downloads', 'teams-mcp');
 
+  // UNC paths are rejected outright: even a lexical pass over them invites
+  // ambiguity, and any filesystem touch could leak NTLM credentials.
+  if (outputPath.startsWith('\\\\')) {
+    return err(createError(ErrorCode.INVALID_INPUT,
+      `outputPath must be a file inside the download directory (${root}); UNC paths are not allowed`));
+  }
+
   const dest = isAbsolute(outputPath) ? outputPath : resolve(root, outputPath);
+
+  // Lexical containment before any realpath: `..` escapes fail without
+  // touching the filesystem.
+  const lexRel = relative(resolve(root), resolve(dest));
+  if (lexRel === '..' || lexRel.startsWith('..' + sep) || isAbsolute(lexRel)) {
+    return err(createError(ErrorCode.INVALID_INPUT,
+      `outputPath must be inside the download directory (${root})`));
+  }
 
   // A ':' in the file name is an NTFS alternate data stream, not a real file.
   if (process.platform === 'win32' && basename(dest).includes(':')) {
@@ -93,30 +135,25 @@ async function resolveOutputPath(outputPath: string): Promise<Result<string>> {
 
   try {
     await mkdir(root, { recursive: true });
-    const rootReal = await realpath(root);
-    const parentReal = await realpath(dirname(dest));
-    const [rootCmp, parentCmp] = process.platform === 'win32'
-      ? [rootReal.toLowerCase(), parentReal.toLowerCase()]
-      : [rootReal, parentReal];
-    const rel = relative(rootCmp, parentCmp);
-    if (rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel)) {
+    await mkdir(dirname(dest), { recursive: true });
+    if (!(await parentInsideRoot(root, dest))) {
       return err(createError(ErrorCode.INVALID_INPUT,
         `outputPath must be inside the download directory (${root})`));
     }
+    return ok({ root, dest: join(await realpath(dirname(dest)), basename(dest)) });
   } catch (error) {
     return err(createError(ErrorCode.INVALID_INPUT,
       `Could not resolve destination inside the download directory (${root}): ${error instanceof Error ? error.message : String(error)}`,
-      { retryable: false, suggestions: ['The parent directory of outputPath must exist'] }));
+      { retryable: false }));
   }
-
-  return ok(dest);
 }
 
 /**
- * Downloads a file to `outputPath` (resolved inside the download root; parent
- * must exist; never overwrites). `url` is a Graph drive-item URL or a
- * SharePoint/OneDrive web URL. Streams to disk, verifies the byte count
- * against Graph's reported size, and removes the partial file on any failure.
+ * Downloads a file to `outputPath` (resolved inside the download root;
+ * missing subdirectories are created; never overwrites). `url` is a Graph
+ * drive-item URL or a SharePoint/OneDrive web URL. Streams to disk, verifies
+ * the byte count against Graph's reported size, and removes the partial file
+ * on any failure.
  */
 export async function downloadFile(url: string, outputPath: string): Promise<Result<DownloadedFile>> {
   const itemUrl = toDriveItemUrl(url);
@@ -167,11 +204,11 @@ export async function downloadFile(url: string, outputPath: string): Promise<Res
     return err(createError(ErrorCode.API_ERROR, 'Microsoft Graph did not return a SharePoint download link for this file', { retryable: false }));
   }
 
-  const saved = await streamToFile(downloadUrl, dest.value, item.size);
+  const saved = await streamToFile(downloadUrl, dest.value.root, dest.value.dest, item.size);
   if (!saved.ok) return saved;
   return ok({
     name: item.name ?? '',
-    outputPath: dest.value,
+    outputPath: dest.value.dest,
     size: saved.value.size,
     contentType: saved.value.contentType ?? item.file.mimeType ?? 'application/octet-stream',
     sha256: saved.value.sha256,
@@ -181,9 +218,23 @@ export async function downloadFile(url: string, outputPath: string): Promise<Res
 /** Stream a pre-authenticated link to a new file, with an inactivity timeout. */
 async function streamToFile(
   url: string,
+  root: string,
   outputPath: string,
   expectedSize: number | undefined,
 ): Promise<Result<{ size: number; sha256: string; contentType?: string }>> {
+  // Re-verify containment immediately before open(): the parent directory
+  // could have been swapped for a junction between resolution and now.
+  try {
+    if (!(await parentInsideRoot(root, outputPath))) {
+      return err(createError(ErrorCode.INVALID_INPUT,
+        `outputPath must be inside the download directory (${root})`));
+    }
+  } catch (error) {
+    return err(createError(ErrorCode.INVALID_INPUT,
+      `Could not verify destination inside the download directory (${root}): ${error instanceof Error ? error.message : String(error)}`,
+      { retryable: false }));
+  }
+
   let file;
   try {
     // Exclusive creation: never overwrite an existing file or follow a symlink.
