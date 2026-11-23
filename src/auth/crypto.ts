@@ -22,6 +22,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { KEY_PATH as DEFAULT_KEY_PATH } from './paths.js';
+import { DPAPI_CALL_TIMEOUT_MS } from '../constants.js';
 import * as log from '../utils/logger.js';
 
 /** Algorithm for encryption. */
@@ -84,7 +85,7 @@ function runDpapi(operation: 'Protect' | 'Unprotect', data: Buffer): Buffer {
   const output = execFileSync(
     POWERSHELL_EXE,
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-    { input: data.toString('base64'), encoding: 'utf8', timeout: 30000, windowsHide: true, cwd: process.env.SystemRoot }
+    { input: data.toString('base64'), encoding: 'utf8', timeout: DPAPI_CALL_TIMEOUT_MS, windowsHide: true, cwd: process.env.SystemRoot }
   );
 
   return Buffer.from(output.trim(), 'base64');

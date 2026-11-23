@@ -169,6 +169,9 @@ export const BROWSER_REFRESH_LAUNCH_TIMEOUT_MS = 30_000;
 /** Max wait for individual browser steps: evaluate, storageState, close (ms). */
 export const BROWSER_STEP_TIMEOUT_MS = 15_000;
 
+/** Max wait for one PowerShell DPAPI protect/unprotect call (ms). */
+export const DPAPI_CALL_TIMEOUT_MS = 30_000;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // User Identity
 // ─────────────────────────────────────────────────────────────────────────────

@@ -32,6 +32,7 @@ import {
 import { decodeJwtPayload } from './token-extractor.js';
 import { ErrorCode, createError } from '../types/errors.js';
 import { type Result, ok, err } from '../types/result.js';
+import { truncateErrorBody } from '../utils/http.js';
 import * as log from '../utils/logger.js';
 
 // ============================================================================
@@ -347,10 +348,10 @@ async function refreshAccessToken(
         if (errorJson.error_description) {
           errorDetail = errorJson.error_description;
         } else if (errorJson.error) {
-          errorDetail = `${errorJson.error}: ${errorText}`;
+          errorDetail = `${errorJson.error}: ${truncateErrorBody(errorText)}`;
         }
       } catch {
-        errorDetail = `HTTP ${response.status}: ${errorText.substring(0, 200)}`;
+        errorDetail = `HTTP ${response.status}: ${truncateErrorBody(errorText)}`;
       }
 
       // Consent/resource refusals are not an expired Teams login. Do not classify
@@ -427,7 +428,7 @@ async function exchangeSkypeToken(
       const errorText = await response.text().catch(() => '');
       return err(createError(
         ErrorCode.AUTH_EXPIRED,
-        `Skype token exchange failed: HTTP ${response.status}: ${errorText.substring(0, 200)}`,
+        `Skype token exchange failed: HTTP ${response.status}: ${truncateErrorBody(errorText)}`,
         { retryable: false }
       ));
     }

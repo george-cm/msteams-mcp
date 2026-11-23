@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { httpRequest, clearRateLimitState } from './http.js';
+import { truncateErrorBody, httpRequest, clearRateLimitState } from './http.js';
+import { ErrorCode } from '../types/errors.js';
 
 describe('httpRequest', () => {
   beforeEach(() => {
@@ -331,3 +332,44 @@ describe('error body truncation', () => {
       expect(result.error.message).toContain('HTTP 500: short failure');
     }
   });});
+
+describe('truncateErrorBody', () => {
+  it('returns short text unchanged', () => {
+    expect(truncateErrorBody('short failure')).toBe('short failure');
+    expect(truncateErrorBody('')).toBe('');
+  });
+
+  it('caps long text at MAX_ERROR_BODY_CHARS with a truncation marker', () => {
+    const long = 'E'.repeat(1000);
+    const out = truncateErrorBody(long);
+    expect(out).toBe('E'.repeat(300) + '… [truncated]');
+    expect(out).not.toContain('E'.repeat(301));
+  });
+});
+
+describe('error classification sees the full body', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    clearRateLimitState();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('classifies on the untruncated body while the message stays capped', async () => {
+    // 'timeout' sits beyond the 300-char display cap: classification must
+    // still see it, while the user-facing message stays truncated.
+    const body = 'x'.repeat(400) + 'timeout';
+    vi.mocked(fetch).mockImplementation(async () => new Response(body, { status: 418 }));
+
+    const result = await httpRequest('https://api.example.com/x', { maxRetries: 1 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(ErrorCode.TIMEOUT);
+      expect(result.error.message).toContain('… [truncated]');
+      expect(result.error.message).not.toContain('timeout');
+    }
+  });
+});
