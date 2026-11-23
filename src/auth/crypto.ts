@@ -9,11 +9,13 @@
  * - version 1 (legacy): key derived via scrypt from hostname + username.
  *   Kept so existing files remain readable; new writes prefer version 2.
  *
- * DPAPI protects the key file against offline theft (copied files, backups):
- * an attacker who copies the config directory to another machine or account
- * cannot unwrap the key. It does NOT protect against other processes running
- * as the same user — DPAPI unprotects for any process in the same user
- * context.
+ * DPAPI ties the key file to the user's logon credential: it cannot be
+ * unwrapped without the user's password or a domain DPAPI backup key —
+ * though DPAPI master keys roam with a Roaming %APPDATA% profile and can
+ * be unwrapped offline once the password is known. It does NOT cover
+ * `browser-profile/` (which holds the MSAL refresh token unencrypted)
+ * and does NOT protect against other processes running as the same
+ * user — DPAPI unprotects for any process in the same user context.
  */
 
 import * as crypto from 'crypto';

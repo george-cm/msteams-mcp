@@ -346,7 +346,7 @@ Session files are stored in a user config directory (encrypted):
 - **macOS/Linux**: `~/.teams-mcp-server/`
 - **Windows**: `%APPDATA%\teams-mcp-server\`
 
-Contents: `session-state.json`, `token-cache.json`, `browser-profile/`
+Contents: `session-state.json`, `token-cache.json`, `key.dpapi` (DPAPI-wrapped key, Windows only), `browser-profile/`, `logs/server.log`
 
 If your session expires, call `teams_login` or delete the config directory.
 
