@@ -201,7 +201,7 @@ const addFavoriteToolDefinition: Tool = {
 
 const removeFavoriteToolDefinition: Tool = {
   name: 'teams_remove_favorite',
-  annotations: { readOnlyHint: false, destructiveHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   description: 'Remove a conversation from the user\'s favourites/pinned list.',
   inputSchema: {
     type: 'object',
@@ -241,7 +241,7 @@ const saveMessageToolDefinition: Tool = {
 
 const unsaveMessageToolDefinition: Tool = {
   name: 'teams_unsave_message',
-  annotations: { readOnlyHint: false, destructiveHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   description: 'Remove a saved (bookmarked) message in Teams.',
   inputSchema: {
     type: 'object',
@@ -367,7 +367,7 @@ const getUnreadToolDefinition: Tool = {
 
 const markAsReadToolDefinition: Tool = {
   name: 'teams_mark_read',
-  annotations: { readOnlyHint: false, destructiveHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   description: 'Mark a conversation as read up to a specific message. This updates your read position so messages up to (and including) the specified message are marked as read.',
   inputSchema: {
     type: 'object',
@@ -446,7 +446,7 @@ const addReactionToolDefinition: Tool = {
 
 const removeReactionToolDefinition: Tool = {
   name: 'teams_remove_reaction',
-  annotations: { readOnlyHint: false, destructiveHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   description: 'Remove an emoji reaction from a message.',
   inputSchema: {
     type: 'object',

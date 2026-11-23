@@ -11,6 +11,9 @@ const DESTRUCTIVE_TOOLS = new Set([
   'teams_edit_message',
   'teams_submission_action',
   'teams_login',
+  'teams_remove_favorite',
+  'teams_unsave_message',
+  'teams_remove_reaction',
 ]);
 
 describe('tool annotations', () => {
