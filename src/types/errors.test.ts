@@ -38,6 +38,15 @@ describe('createError', () => {
     ]);
   });
 
+  it('creates error with defaults for AUTH_INTERACTION_REQUIRED including the loop breaker', () => {
+    const error = createError(ErrorCode.AUTH_INTERACTION_REQUIRED, 'needs sign-in');
+    expect(error.suggestions).toEqual([
+      'Assignments is optional (education tenants only); all other Teams tools are unaffected',
+      'On an education account, open Assignments in Teams and complete any sign-in or consent prompt, then use teams_login to capture the updated session',
+      'If teams_login reports success but the same request fails again with an authentication error, stop and tell the user instead of calling teams_login again',
+    ]);
+  });
+
   it('creates retryable error for RATE_LIMITED by default', () => {
     const error = createError(ErrorCode.RATE_LIMITED, 'Too many requests');
     expect(error.retryable).toBe(true);

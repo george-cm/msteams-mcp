@@ -97,6 +97,7 @@ function getDefaultSuggestions(code: ErrorCode): string[] {
       return [
         'Assignments is optional (education tenants only); all other Teams tools are unaffected',
         'On an education account, open Assignments in Teams and complete any sign-in or consent prompt, then use teams_login to capture the updated session',
+        'If teams_login reports success but the same request fails again with an authentication error, stop and tell the user instead of calling teams_login again',
       ];
     case ErrorCode.ACCESS_DENIED:
       return ['Check your access and required consent with the tenant administrator'];

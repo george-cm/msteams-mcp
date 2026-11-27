@@ -174,7 +174,7 @@ async function refreshFlaggedOptionalTokens(): Promise<{ note: string; warnings:
     const label = OPTIONAL_RESOURCE_LABELS[resource];
     const result = await refreshOptionalTokenForLogin(resource);
     if (result.ok) continue;
-    const detail = result.error.message.trim().replace(/[.\s]+$/, '');
+    const detail = result.error.message.replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '') || label;
     const sentence = `${detail}. Do not call teams_login again for this; ${label} is still unavailable — tell the user and continue with other Teams tools.`;
     warnings.push(sentence);
     note.push(` ${sentence}`);
