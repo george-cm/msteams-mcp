@@ -7,6 +7,9 @@ Non-obvious project knowledge for AI agents. This is not a tool reference: tool 
 - **Repository**: [george-cm/msteams-mcp](https://github.com/george-cm/msteams-mcp) (this fork: where work lands; branch from `main`, open PRs here)
 - **Upstream**: [m0nkmaster/msteams-mcp](https://github.com/m0nkmaster/msteams-mcp) (source project; target only for changes deliberately sent upstream - drop this block from such PRs)
 - **Install (fork)**: clone the fork, `npm install && npm run build`, then point your MCP client at `dist/index.js`. `npx -y msteams-mcp@latest` installs upstream's published package, without this fork's changes.
+- **GitHub CLI**: always pass `--repo george-cm/msteams-mcp` to `gh` (PRs, runs, checks). There is deliberately no `upstream` git remote: it made `gh` default to upstream, and a fork PR was opened there by mistake (2026-11-27). Sync with upstream via `gh repo sync george-cm/msteams-mcp`; do not re-add the remote. Details: `knowledge/conventions/github_fork_workflow.md`.
+- **`main` is protected** (ruleset `protect-main`): no direct pushes, every change goes through a PR, and CI (`test (20.19)`, `test (22.12)`) must pass before merging. No force-push, no deletion. Merge with a merge commit; merging needs George's explicit yes.
+- **Project knowledge**: decisions, conventions and playbooks live in `knowledge/` (index: `knowledge/index.md`). Read it before changing auth, attachments or the CLI.
 
 ## Project Overview
 
