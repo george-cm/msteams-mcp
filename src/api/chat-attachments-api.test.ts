@@ -1252,7 +1252,14 @@ describe('prepareChatAttachments', () => {
 
     const result = await prepareChatAttachments(CHAT, [file]);
 
-    expect(result).toMatchObject({ ok: false, error: { code: ErrorCode.ACCESS_DENIED } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: ErrorCode.ACCESS_DENIED, message: 'no consent' },
+    });
+    // ACCESS_DENIED keeps its own suggestions — teams_login cannot fix consent.
+    if (!result.ok) {
+      expect(result.error.suggestions?.join(' ') ?? '').not.toContain('teams_login');
+    }
     expect(mockHttp).not.toHaveBeenCalled();
     expect(mockMessageAuth).not.toHaveBeenCalled();
   });
@@ -1280,6 +1287,7 @@ describe('prepareChatAttachments', () => {
           'Attachments need Microsoft Graph, which could not be authorized:'),
         suggestions: [
           'Call teams_login (without forceNew) to refresh the session silently, then retry the send',
+          'If teams_login reports success but the send fails again with an authentication error, stop and tell the user instead of calling teams_login again',
           'Nothing was sent; other Teams tools are unaffected',
           'To send without attachments, retry without files',
         ],

@@ -705,6 +705,12 @@ export async function prepareChatAttachments(
   const tokenResult = await requireGraphTokenAsync();
   if (!tokenResult.ok) {
     const cause = tokenResult.error;
+    // Only the auth-state failure gets login advice: ACCESS_DENIED (consent,
+    // Conditional Access) and transport errors keep their own suggestions —
+    // teams_login cannot fix them and the loop breaker would not apply.
+    if (cause.code !== ErrorCode.AUTH_INTERACTION_REQUIRED) {
+      return err(cause);
+    }
     return err(createError(cause.code,
       `Attachments need Microsoft Graph, which could not be authorized: ${cause.message}`,
       {
@@ -712,6 +718,7 @@ export async function prepareChatAttachments(
         retryAfterMs: cause.retryAfterMs,
         suggestions: [
           'Call teams_login (without forceNew) to refresh the session silently, then retry the send',
+          'If teams_login reports success but the send fails again with an authentication error, stop and tell the user instead of calling teams_login again',
           'Nothing was sent; other Teams tools are unaffected',
           'To send without attachments, retry without files',
         ],

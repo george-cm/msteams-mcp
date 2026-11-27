@@ -84,7 +84,28 @@ export async function downloadFile(url: string, outputPath: string): Promise<Res
   }
 
   const tokenResult = await requireGraphTokenAsync();
-  if (!tokenResult.ok) return tokenResult;
+  if (!tokenResult.ok) {
+    const cause = tokenResult.error;
+    // Only the auth-state failure gets login advice: ACCESS_DENIED (consent,
+    // Conditional Access) and transport errors keep their own suggestions —
+    // teams_login cannot fix them and the loop breaker would not apply.
+    if (cause.code !== ErrorCode.AUTH_INTERACTION_REQUIRED) {
+      return err(cause);
+    }
+    // The code's default suggestions talk about EDU Assignments — the wrong
+    // context for file downloads (same fix as chat attachments).
+    return err(createError(cause.code,
+      `File downloads need Microsoft Graph, which could not be authorized: ${cause.message}`,
+      {
+        retryable: cause.retryable,
+        retryAfterMs: cause.retryAfterMs,
+        suggestions: [
+          'Call teams_login (without forceNew) to refresh the session silently, then retry the download',
+          'If teams_login reports success but the download fails again with an authentication error, stop and tell the user instead of calling teams_login again',
+          'Other Teams tools are unaffected',
+        ],
+      }));
+  }
 
   const params = new URLSearchParams({ '$select': 'name,size,file,currentUserRole,content.downloadUrl' });
   const meta = await httpRequest<RawDriveItem>(`${itemUrl}?${params.toString()}`, {
