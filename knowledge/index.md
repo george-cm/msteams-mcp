@@ -11,3 +11,4 @@ title: msteams-mcp (fork) knowledge
 - [Graph token expired: plain teams_login, never forceNew](playbooks/graph_token_expired_teams_login.md) - AADSTS700084 SPA refresh-token 24h limit; headless SSO fixes it
 - [teams_login failure semantics and the forceNew policy](decisions/teams_login_failure_and_forcenew_policy.md) - plain login first, forceNew with approval only, API_ERROR instead of fake success, sign-in guards
 - [GitHub workflow for the msteams-mcp fork](conventions/github_fork_workflow.md) - no upstream remote, always gh --repo, main protected, PR + CI + merge commit
+- [CLI message input: --content-file and bare-value conflicts](decisions/cli_message_input.md) - Windows npm run newline trap, --content-file path guard, bare value + same flag is a usage error
