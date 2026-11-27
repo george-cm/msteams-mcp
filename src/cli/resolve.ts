@@ -423,6 +423,9 @@ export function parseToolArgs(
     if (args[positional] === undefined) {
       args[positional] = coerce(props[positional], value, positional);
       missing.splice(missing.indexOf(positional), 1);
+    } else {
+      const shown = value.length > 40 ? `${value.slice(0, 40)}…` : value;
+      throw new UsageError(`The bare value '${shown}' is --${positional}, which is already given as a flag. Pass --${positional} once.\nRun 'msteams help ${label}' for its flags.`);
     }
   }
 

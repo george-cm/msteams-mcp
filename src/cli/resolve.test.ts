@@ -106,8 +106,44 @@ describe('parseToolArgs', () => {
     expect(args).toEqual({ content: 'hi', conversationId: '19:abc' });
   });
 
-  it('prefers an explicit flag over the positional', () => {
-    expect(parse('teams_search', ['bare', '--query', 'flag']).args.query).toBe('flag');
+  it('rejects a bare value when its parameter is already given as a flag', () => {
+    expect(() => parse('teams_search', ['bare', '--query', 'flag'])).toThrowError(UsageError);
+    expect(() => parse('teams_search', ['bare', '--query', 'flag'])).toThrowError(/--query/);
+    expect(() => parse('teams_search', ['bare', '--query', 'flag'])).toThrowError(/already given/);
+  });
+
+  it('rejects a bare content when --content is also given', () => {
+    expect(() => parse('teams_send_message', ['hi', '--content', 'bye', '--to', '19:abc']))
+      .toThrowError(UsageError);
+  });
+
+  it('names the mapped parameter for edit_message, not the message text', () => {
+    // The bare value maps to the first required parameter (conversationId),
+    // so a stray "new text" must not be silently dropped.
+    expect(() => parse('teams_edit_message', ['new text', '--conversationId', '19:x', '--messageId', '1', '--content', 'c']))
+      .toThrowError(/--conversationId/);
+  });
+
+  it('rejects a bare value that duplicates an alias of the same parameter', () => {
+    expect(() => parse('teams_edit_message', ['19:x', '--to', '19:y', '--messageId', '1', '--content', 'c']))
+      .toThrowError(UsageError);
+  });
+
+  it('rejects a bare value when the flag was given as an empty string', () => {
+    expect(() => parse('teams_search', ['bare', '--query', ''])).toThrowError(UsageError);
+  });
+
+  it('truncates a long bare value in the conflict message', () => {
+    const long = 'x'.repeat(200);
+    let message = '';
+    try {
+      parse('teams_search', [long, '--query', 'flag']);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('…');
+    expect(message).not.toContain(long);
+    expect(message.length).toBeLessThan(200);
   });
 
   it('extracts the global flags without passing them to the tool', () => {
