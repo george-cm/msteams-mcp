@@ -143,3 +143,5 @@ Work items not yet scheduled. Strategic direction lives in [ROADMAP.md](ROADMAP.
 **Done when:**
 - After `npm test`, `.tmp/chat-attach-tests/` does not exist, on Windows and on Linux CI.
 - A deleted junction never takes its target's contents with it.
+
+**Status:** Fixed on branch `fix/test-junction-cleanup` — `beforeAll` clears `h.root` first (aborted-run leftovers), `afterAll` removes it, and a characterisation test proves `rmSync` deletes a junction without touching its target.
