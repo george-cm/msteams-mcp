@@ -427,8 +427,13 @@ export function parseToolArgs(
       const flat = value.replace(/\s+/g, ' ');
       const chars = [...flat];
       const shown = chars.length > 40 ? `${chars.slice(0, 40).join('')}…` : flat;
-      const missingNote = missing.length
-        ? ` Missing required ${missing.map(name => `--${name}`).join(', ')}.`
+      // --content-file is applied below, so `missing` still lists content
+      // even though the user already supplied it.
+      const outstanding = parsed.values[CONTENT_FILE_FLAG] !== undefined
+        ? missing.filter(name => name !== CONTENT_PROP)
+        : missing;
+      const missingNote = outstanding.length
+        ? ` Missing required ${outstanding.map(name => `--${name}`).join(', ')}.`
         : '';
       throw new UsageError(
         `The bare value '${shown}' is --${positional}, which is already given as a flag. ` +
