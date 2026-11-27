@@ -106,8 +106,129 @@ describe('parseToolArgs', () => {
     expect(args).toEqual({ content: 'hi', conversationId: '19:abc' });
   });
 
-  it('prefers an explicit flag over the positional', () => {
-    expect(parse('teams_search', ['bare', '--query', 'flag']).args.query).toBe('flag');
+  it('rejects a bare value when its parameter is already given as a flag', () => {
+    expect(() => parse('teams_search', ['bare', '--query', 'flag'])).toThrowError(UsageError);
+    expect(() => parse('teams_search', ['bare', '--query', 'flag'])).toThrowError(/is --query, which is already given/);
+  });
+
+  it('rejects a bare content when --content is also given', () => {
+    expect(() => parse('teams_send_message', ['hi', '--content', 'bye', '--to', '19:abc']))
+      .toThrowError(/is --content, which is already given/);
+  });
+
+  it('names the mapped parameter for edit_message, not the message text', () => {
+    // The bare value maps to the first required parameter (conversationId),
+    // so a stray "new text" must not be silently dropped.
+    expect(() => parse('teams_edit_message', ['new text', '--conversationId', '19:x', '--messageId', '1', '--content', 'c']))
+      .toThrowError(/is --conversationId, which is already given/);
+  });
+
+  it('rejects a bare value that duplicates an alias of the same parameter', () => {
+    expect(() => parse('teams_edit_message', ['19:x', '--to', '19:y', '--messageId', '1', '--content', 'c']))
+      .toThrowError(/is --conversationId, which is already given/);
+  });
+
+  it('rejects a bare value when the flag was given as an empty string', () => {
+    expect(() => parse('teams_search', ['bare', '--query', ''])).toThrowError(/is --query, which is already given/);
+  });
+
+  it.each([
+    { argv: ['bare', '--query=flag'], note: 'equals syntax' },
+    { argv: ['--query', 'flag', 'bare'], note: 'flag before the bare value' },
+    { argv: ['--query', 'q', '--', 'bare'], note: 'after the -- terminator' },
+  ])('rejects a bare value conflicting via $note', ({ argv }) => {
+    expect(() => parse('teams_search', argv)).toThrowError(/already given/);
+  });
+
+  it('truncates a long bare value in the conflict message', () => {
+    const long = 'x'.repeat(200);
+    let message = '';
+    try {
+      parse('teams_search', [long, '--query', 'flag']);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain(`'${'x'.repeat(40)}…'`);
+    expect(message).not.toContain(long);
+  });
+
+  it('keeps the echoed value on one line and never splits a surrogate pair', () => {
+    const tricky = `a\nb${'x'.repeat(36)}😀tail`;
+    let message = '';
+    try {
+      parse('teams_search', [tricky, '--query', 'flag']);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    const firstLine = message.split('\n')[0];
+    expect(firstLine).toContain("'a b");
+    expect(firstLine).toContain('😀…');
+    expect(message.split('\n')).toHaveLength(3);
+  });
+
+  it('does not truncate a bare value of exactly 40 code points', () => {
+    const exact = 'y'.repeat(40);
+    let message = '';
+    try {
+      parse('teams_search', [exact, '--query', 'flag']);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain(`'${exact}'`);
+    expect(message).not.toContain('…');
+  });
+
+  it('names the still-missing parameter instead of advising a repeated flag', () => {
+    // The realistic trap: the bare "new text" maps to --conversationId, so
+    // "Pass --conversationId once" tells the user to do what they already did.
+    // The useful answer names the parameter that is actually missing.
+    let message = '';
+    try {
+      parse('teams_edit_message', ['new text', '--conversationId', '19:x', '--messageId', '1']);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('Missing required --content');
+    expect(message).toContain('Remove the bare value');
+    expect(message).not.toContain('Pass --conversationId once');
+  });
+
+  it('does not claim content is missing when --content-file supplies it', () => {
+    // The BACKLOG's motivating case: --content-file is applied after the
+    // positional check, so `missing` still lists content here. The note must
+    // not tell the user to add --content (which would then conflict).
+    let message = '';
+    try {
+      parseToolArgs(
+        tool('teams_edit_message'),
+        ['t', '--conversationId', '19:x', '--messageId', '1', '--content-file', 'f'],
+        'teams_edit_message',
+        () => 'body'
+      );
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('already given');
+    expect(message).not.toContain('Missing required');
+  });
+
+  it('keeps other missing params in the note when --content-file supplies content', () => {
+    // messageId is still missing here: the filter must drop only content,
+    // not empty the whole list.
+    let message = '';
+    try {
+      parseToolArgs(
+        tool('teams_edit_message'),
+        ['t', '--conversationId', '19:x', '--content-file', 'f'],
+        'teams_edit_message',
+        () => 'body'
+      );
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    const firstLine = message.split('\n')[0];
+    expect(firstLine).toContain('Missing required --messageId.');
+    expect(firstLine).not.toContain('--content');
   });
 
   it('extracts the global flags without passing them to the tool', () => {

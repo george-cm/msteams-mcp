@@ -210,7 +210,8 @@ callable, documented and type-coerced with no CLI changes:
   `node:util` `parseArgs` using an options config built from the tool's JSON
   input schema. Types come from the schema, so there is no hand-maintained
   flag or numeric-field table. The first bare value maps to the first required
-  string parameter. Unknown flags, bad numbers and missing required parameters
+  string parameter; giving that parameter again as a flag is a usage error.
+  Unknown flags, bad numbers and missing required parameters
   are usage errors raised before the server is called.
 - `src/cli/render.ts` prints any response shape: the first array becomes a
   numbered list with a headline field and labelled fields, everything else
