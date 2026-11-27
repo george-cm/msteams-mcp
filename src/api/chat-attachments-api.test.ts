@@ -7,9 +7,9 @@
  * filesystem checks run against real temp files under the worktree's .tmp/.
  */
 
-import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, realpathSync, statSync, symlinkSync, rmSync, promises as nodePromises } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, statSync, symlinkSync, rmSync, promises as nodePromises } from 'node:fs';
 import * as path from 'node:path';
 import { httpRequest } from '../utils/http.js';
 import { requireGraphTokenAsync, requireMessageAuthWithConfig } from '../utils/auth-guards.js';
@@ -88,9 +88,16 @@ function writeTestFile(rel: string, content = 'hello'): string {
 }
 
 beforeAll(() => {
+  // Leftovers from an aborted run must not leak into this one — including
+  // junctions, which block `git worktree remove` once the worktree is gone.
+  rmSync(h.root, { recursive: true, force: true, maxRetries: 3 });
   mkdirSync(h.uploadRoot, { recursive: true });
   mkdirSync(h.fakeHome, { recursive: true });
   mkdirSync(h.configDir, { recursive: true });
+});
+
+afterAll(() => {
+  rmSync(h.root, { recursive: true, force: true, maxRetries: 3 });
 });
 
 afterEach(() => {
@@ -375,6 +382,31 @@ describe('resolveUploadFile', () => {
       ok: false,
       error: { code: ErrorCode.INVALID_INPUT },
     });
+  });
+
+  it('rmSync deletes a junction without touching its target', (ctx) => {
+    const base = path.join(h.root, 'rm-check');
+    const target = path.join(base, 'target');
+    const holder = path.join(base, 'holder');
+    mkdirSync(target, { recursive: true });
+    mkdirSync(holder, { recursive: true });
+    writeFileSync(path.join(target, 'keep.txt'), 'do not delete me');
+    const link = path.join(holder, 'link');
+    try {
+      symlinkSync(target, link, 'junction');
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code === 'EPERM' || code === 'EACCES') {
+        ctx.skip('symlinks not permitted on this host');
+        return;
+      }
+      throw e;
+    }
+
+    rmSync(holder, { recursive: true, force: true });
+
+    expect(existsSync(holder)).toBe(false);
+    expect(readFileSync(path.join(target, 'keep.txt'), 'utf8')).toBe('do not delete me');
   });
 
   it('rejects .. traversal that escapes the root', () => {

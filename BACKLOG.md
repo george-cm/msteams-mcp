@@ -143,3 +143,5 @@ Work items not yet scheduled. Strategic direction lives in [ROADMAP.md](ROADMAP.
 **Done when:**
 - After `npm test`, `.tmp/chat-attach-tests/` does not exist, on Windows and on Linux CI.
 - A deleted junction never takes its target's contents with it.
+
+**Status (2026-11-27):** Fixed in [PR #9](https://github.com/george-cm/msteams-mcp/pull/9) — `beforeAll` clears `h.root` first (aborted-run leftovers), `afterAll` removes it, and a characterisation test proves `rmSync` deletes a junction without touching its target. Linux CI passed (Node 20.19, 22.12). **Review (2026-11-27):** round 1 APPROVE, no minors — accepted residuals: a worktree removed *while* the suite runs can still leave dangling junctions (beforeAll only helps on a re-run in the same worktree), two concurrent vitest processes in one worktree can wipe each other's fixtures (per-process dirs not worth it), `afterAll` is skipped on a worker crash (beforeAll pre-clean covers the next run). `maxRetries: 3` added for transient Windows file locks.
