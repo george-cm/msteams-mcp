@@ -125,6 +125,15 @@ Work items not yet scheduled. Strategic direction lives in [ROADMAP.md](ROADMAP.
 
 **Status (2026-11-27):** Fixed on branch `fix/cli-positional-conflict` — `parseToolArgs` now throws a UsageError naming the parameter the bare value maps to (`--<positional>`), echoing the value whitespace-flattened and truncated to 40 chars, listing any still-missing required flags and the command's flag hint; covers aliases, empty-string flag values, `--flag=value`, flag-before-bare and `--` terminator forms. The upstream `prefers an explicit flag` test was replaced by conflict tests. PR link to follow.
 
+**Thinking round (pre-mortem, 2026-11-27):** failure frame — a user reports the change broke their CLI habit or gave a misleading error. Decisions, not code changes:
+
+- Reverses upstream's pinned "explicit flag wins over positional" semantics on purpose (that silent drop is the bug being fixed). Scripts that relied on flag-wins now exit 2 with an actionable message — accepted; README/AGENTS document it. A future upstream merge may conflict on the replaced test — accepted, the fork diverges deliberately.
+- The `edit_message "text" --conversationId X --messageId M` trap (bare text meant as `content`) now errors naming `--conversationId` plus `Missing required --content` and the flag hint — the user can recover in one step (`--content "text"`). Verified by test; the alternative (guessing the bare value was meant for a different param) would silently pick a param — rejected.
+- `--content-file` is applied after the positional check, so a conflict error fires before the "not both" error when both problems exist (e.g. bare value + `--content` + `--content-file`). Both are usage errors; the conflict is the more fundamental one — accepted, ordering documented in tests.
+- Bare values after a `--` terminator now conflict the same way — consistent extension of the rule, accepted.
+- Echo truncation counts code points, not grapheme clusters: a combining-mark sequence at the boundary can render oddly in the error. Cosmetic, user's own input on their own stderr — accepted.
+- MCP path untouched: `parseToolArgs` is CLI-only, so MCP clients never see this error — confirmed by code path (server.ts does not call it).
+
 ## Attachment path-guard tests leave junctions behind in `.tmp/`
 
 **Added:** 2026-11-27 (George Murga), found while removing merged worktrees.

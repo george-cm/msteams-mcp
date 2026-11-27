@@ -212,6 +212,25 @@ describe('parseToolArgs', () => {
     expect(message).not.toContain('Missing required');
   });
 
+  it('keeps other missing params in the note when --content-file supplies content', () => {
+    // messageId is still missing here: the filter must drop only content,
+    // not empty the whole list.
+    let message = '';
+    try {
+      parseToolArgs(
+        tool('teams_edit_message'),
+        ['t', '--conversationId', '19:x', '--content-file', 'f'],
+        'teams_edit_message',
+        () => 'body'
+      );
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    const firstLine = message.split('\n')[0];
+    expect(firstLine).toContain('Missing required --messageId.');
+    expect(firstLine).not.toContain('--content');
+  });
+
   it('extracts the global flags without passing them to the tool', () => {
     const parsed = parse('teams_search', ['hi', '--json']);
     expect(parsed.json).toBe(true);
