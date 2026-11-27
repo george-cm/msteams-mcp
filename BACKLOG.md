@@ -123,7 +123,7 @@ Work items not yet scheduled. Strategic direction lives in [ROADMAP.md](ROADMAP.
 
 **Proposal:** throw a UsageError when the positional's parameter is already set.
 
-**Status (2026-11-27):** Fixed on branch `fix/cli-positional-conflict` — `parseToolArgs` now throws a UsageError naming the parameter (`--<positional>`) and echoing the bare value truncated to 40 chars, covering aliases and empty-string flag values; the upstream `prefers an explicit flag` test was replaced by conflict tests. PR link to follow.
+**Status (2026-11-27):** Fixed on branch `fix/cli-positional-conflict` — `parseToolArgs` now throws a UsageError naming the parameter the bare value maps to (`--<positional>`), echoing the value whitespace-flattened and truncated to 40 chars, listing any still-missing required flags and the command's flag hint; covers aliases, empty-string flag values, `--flag=value`, flag-before-bare and `--` terminator forms. The upstream `prefers an explicit flag` test was replaced by conflict tests. PR link to follow.
 
 ## Attachment path-guard tests leave junctions behind in `.tmp/`
 

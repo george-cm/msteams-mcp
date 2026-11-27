@@ -424,8 +424,17 @@ export function parseToolArgs(
       args[positional] = coerce(props[positional], value, positional);
       missing.splice(missing.indexOf(positional), 1);
     } else {
-      const shown = value.length > 40 ? `${value.slice(0, 40)}…` : value;
-      throw new UsageError(`The bare value '${shown}' is --${positional}, which is already given as a flag. Pass --${positional} once.\nRun 'msteams help ${label}' for its flags.`);
+      const flat = value.replace(/\s+/g, ' ');
+      const chars = [...flat];
+      const shown = chars.length > 40 ? `${chars.slice(0, 40).join('')}…` : flat;
+      const missingNote = missing.length
+        ? ` Missing required ${missing.map(name => `--${name}`).join(', ')}.`
+        : '';
+      throw new UsageError(
+        `The bare value '${shown}' is --${positional}, which is already given as a flag. ` +
+        `Remove the bare value, or pass it with the flag you meant.${missingNote}\n` +
+        flagHint(props, label)
+      );
     }
   }
 
