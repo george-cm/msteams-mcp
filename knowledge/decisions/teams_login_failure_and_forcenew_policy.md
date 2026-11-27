@@ -33,5 +33,5 @@ The old advice claimed plain login "returns early without fixing the problem". C
 
 ## Open (BACKLOG.md)
 
-- Plain login does not refresh optional tokens (Graph) on the fast path: possible login -> retry loop.
+- ~~Plain login does not refresh optional tokens (Graph) on the fast path~~ - resolved 2026-11-27 in [PR #6](https://github.com/george-cm/msteams-mcp/pull/6): flagged optional resources force headless SSO, plus a loop-breaker warning. See [the Graph playbook](../playbooks/graph_token_expired_teams_login.md).
 - The browser's own session save has no epoch check (narrow window, deferred).
