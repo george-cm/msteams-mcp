@@ -90,14 +90,14 @@ function writeTestFile(rel: string, content = 'hello'): string {
 beforeAll(() => {
   // Leftovers from an aborted run must not leak into this one — including
   // junctions, which block `git worktree remove` once the worktree is gone.
-  rmSync(h.root, { recursive: true, force: true });
+  rmSync(h.root, { recursive: true, force: true, maxRetries: 3 });
   mkdirSync(h.uploadRoot, { recursive: true });
   mkdirSync(h.fakeHome, { recursive: true });
   mkdirSync(h.configDir, { recursive: true });
 });
 
 afterAll(() => {
-  rmSync(h.root, { recursive: true, force: true });
+  rmSync(h.root, { recursive: true, force: true, maxRetries: 3 });
 });
 
 afterEach(() => {
