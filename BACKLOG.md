@@ -122,3 +122,24 @@ Work items not yet scheduled. Strategic direction lives in [ROADMAP.md](ROADMAP.
 **Problem:** in `src/cli/resolve.ts`, a positional value is only applied when `args[positional] === undefined`, so `msteams send_message "hello" --content "bye"` sends "bye" and discards "hello" with no error; same for `edit_message "text" --conversationId X --messageId M --content-file f`.
 
 **Proposal:** throw a UsageError when the positional's parameter is already set.
+
+## Attachment path-guard tests leave junctions behind in `.tmp/`
+
+**Added:** 2026-11-27 (George Murga), found while removing merged worktrees.
+
+**Problem:**
+- Two tests in `src/api/chat-attachments-api.test.ts` create directory junctions under `<cwd>/.tmp/chat-attach-tests/uploads/`, and nothing removes them:
+  - 'rejects a junction inside the root that points outside it' creates `innocent-dir` -> `../junction-target`;
+  - 'rejects a junction inside the root that resolves into a dot-directory' creates `looks-safe` -> `uploads/sub/.ssh`.
+- The file has `beforeAll` (mkdir) and `afterEach` (mocks/env), but no `afterAll` that deletes `h.root`.
+- Effect: every worktree that ran the suite kept `.tmp/chat-attach-tests/`. After `git worktree remove` the junctions were left dangling, and the folders could not be removed until the links were unlinked by hand (4 worktrees on 2026-11-27).
+- Not a security issue: the targets are inside the same test root.
+
+**Proposal:**
+- Add `afterAll(() => rmSync(h.root, { recursive: true, force: true }))`.
+- Check that `rmSync` removes junctions on Windows without following them. Node does not follow links when deleting recursively, but verify with a test that the junction target survives.
+- Alternatively, unlink each junction in a `finally` inside the two tests.
+
+**Done when:**
+- After `npm test`, `.tmp/chat-attach-tests/` does not exist, on Windows and on Linux CI.
+- A deleted junction never takes its target's contents with it.
